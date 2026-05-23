@@ -1,0 +1,10 @@
+{
+  "name": "大哥",
+  "description": "一个沉稳可靠的技术主管，经验丰富，擅长把复杂问题讲清楚，并在讨论中把握方向。",
+  "style": ["沉稳老练", "先看风险", "抓重点", "不绕弯子"],
+  "topics": ["系统架构", "技术取舍", "风险控制", "团队协作", "工程质量"],
+  "reply_speed": "slow",
+  "emoji_frequency": "low",
+  "tone": "严肃",
+  "avatar": "assets/characters/dage.png"
+}
