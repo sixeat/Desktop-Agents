@@ -7,7 +7,6 @@ from core.agent import Agent
 from core.agent_bus import AgentBus
 from core.llm_client import OpenAICompatibleClient
 from core.llm_settings import has_api_key, load_llm_settings, settings_to_client_kwargs
-from core.tooling import ToolRegistry
 from ui.agent_manager import AgentManager
 from ui.api_key_dialog import ApiKeyDialog
 
@@ -39,7 +38,6 @@ def main():
         persona_name: Agent(
             persona_name=persona_name,
             client=OpenAICompatibleClient(**client_kwargs),
-            tools=ToolRegistry.with_defaults(),
         )
         for persona_name in load_group_persona_names()
     }
@@ -49,8 +47,6 @@ def main():
         bus.register(agent_id, agent)
 
     manager = AgentManager(bus=bus, agents=agents)
-    bus.permission_requester = manager.request_tool_permission
-    bus.screenshot_requester = manager.request_screenshot
     manager.create_widgets()
     manager.show_all()
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QPoint, QRectF, pyqtSignal, QEasingCurve, QVariantAnimation
 from PyQt6.QtGui import QAction, QColor, QPainter, QPainterPath, QPen, QPixmap, QBrush, QFont
-from PyQt6.QtWidgets import QApplication, QInputDialog, QMenu, QMessageBox, QSystemTrayIcon
+from PyQt6.QtWidgets import QApplication, QInputDialog, QMenu, QSystemTrayIcon
 
 from config import AGENT_SIZE, BREATHE_MIN_SCALE, BREATHE_MAX_SCALE, BREATHE_DURATION_MS, CHARACTERS_DIR, PROJECT_ROOT
 from core.agent import Agent
@@ -274,35 +274,18 @@ class AgentWidget(DesktopWindow):
 
         history_action = QAction("聊天记录", self)
         import_wechat_action = QAction("导入聊天记录人格", self)
-        settings_action = QAction("设置", self)
         api_key_action = QAction("API Key 设置", self)
         quit_action = QAction("退出", self)
         history_action.triggered.connect(self.history_requested.emit)
         import_wechat_action.triggered.connect(self.wechat_import_requested.emit)
-        settings_action.triggered.connect(self._on_settings)
         api_key_action.triggered.connect(self.api_key_settings_requested.emit)
         quit_action.triggered.connect(self._on_quit)
         menu.addAction(history_action)
         menu.addAction(import_wechat_action)
-        menu.addAction(settings_action)
         menu.addAction(api_key_action)
         menu.addSeparator()
         menu.addAction(quit_action)
         menu.exec(self.mapToGlobal(pos))
-
-    def _on_settings(self):
-        topics = "、".join(getattr(self.agent, "topics", [])) or "未配置"
-        style = "、".join(getattr(self.agent, "style", [])) or "未配置"
-        text = (
-            f"当前人格：{self.agent.name}\n"
-            f"描述：{self.agent.description}\n"
-            f"语气：{getattr(self.agent, 'tone', '未配置')}\n"
-            f"风格：{style}\n"
-            f"兴趣话题：{topics}\n"
-            f"回复速度：{getattr(self.agent, 'reply_speed', '未配置')}\n"
-            f"表情频率：{getattr(self.agent, 'emoji_frequency', '未配置')}"
-        )
-        QMessageBox.information(None, f"{self.agent.name} 的设置", text)
 
     def _on_quit(self):
         QApplication.instance().quit()
@@ -317,21 +300,12 @@ class AgentWidget(DesktopWindow):
         tray_menu = QMenu()
         show_action = QAction("显示", self)
         hide_action = QAction("隐藏", self)
-        history_action = QAction("聊天记录", self)
-        import_wechat_action = QAction("导入聊天记录人格", self)
-        api_key_action = QAction("API Key 设置", self)
         quit_action = QAction("退出", self)
         show_action.triggered.connect(self.show)
         hide_action.triggered.connect(self.hide)
-        history_action.triggered.connect(self.history_requested.emit)
-        import_wechat_action.triggered.connect(self.wechat_import_requested.emit)
-        api_key_action.triggered.connect(self.api_key_settings_requested.emit)
         quit_action.triggered.connect(self._on_quit)
         tray_menu.addAction(show_action)
         tray_menu.addAction(hide_action)
-        tray_menu.addAction(history_action)
-        tray_menu.addAction(import_wechat_action)
-        tray_menu.addAction(api_key_action)
         tray_menu.addSeparator()
         tray_menu.addAction(quit_action)
         self.tray_icon.setContextMenu(tray_menu)

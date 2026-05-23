@@ -40,8 +40,6 @@ class OpenAICompatibleClient:
     async def complete(
         self,
         messages: list[dict],
-        tools: list[dict] | None = None,
-        tool_choice: str | dict = "auto",
         temperature: float = 0.7,
     ) -> dict:
         if not self.api_key:
@@ -53,9 +51,6 @@ class OpenAICompatibleClient:
             "temperature": temperature,
             "stream": False,
         }
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = tool_choice
 
         try:
             timeout = aiohttp.ClientTimeout(total=self.timeout)

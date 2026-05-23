@@ -1,12 +1,9 @@
-import asyncio
-import tempfile
-import threading
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, QPoint, QRect, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
-from config import AGENT_SIZE, DEFAULT_AGENT_X, DEFAULT_AGENT_Y, PERSONAS_DIR, PROJECT_ROOT
+from config import AGENT_SIZE, DEFAULT_AGENT_X, DEFAULT_AGENT_Y, PERSONAS_DIR
 from core.agent import Agent
 from core.agent_bus import AgentBus, BusMessage
 from core.llm_client import OpenAICompatibleClient
@@ -19,13 +16,10 @@ from ui.agent_widget import AgentWidget
 from ui.api_key_dialog import ApiKeyDialog
 from ui.chat_history_window import ChatHistoryWindow
 from ui.import_dialog import WeChatImportDialog
-from ui.tool_permission_dialog import ToolPermissionDialog
 
 
 class AgentManager(QObject):
     bus_message_received = pyqtSignal(object)
-    tool_permission_requested = pyqtSignal(object)
-    screenshot_requested = pyqtSignal(object)
 
     def __init__(self, bus: AgentBus, agents: dict[str, Agent], parent=None):
         super().__init__(parent)
@@ -35,16 +29,11 @@ class AgentManager(QObject):
         self.widgets: dict[str, AgentWidget] = {}
         self.chat_history_window = ChatHistoryWindow()
         self.import_dialog: WeChatImportDialog | None = None
-        self._permission_requests: dict[int, tuple[threading.Event, dict]] = {}
-        self._screenshot_requests: dict[int, tuple[threading.Event, dict]] = {}
-        self._request_counter = 0
         self.chat_history_window.load_messages(list(self.bus.recent_history))
         self.chat_history_window.clear_requested.connect(self.clear_chat_history)
         self._unsubscribe = self.bus.subscribe(self._on_bus_message)
         self.bus_message_received.connect(self._display_bus_message)
         self.bus_message_received.connect(self.chat_history_window.append_message)
-        self.tool_permission_requested.connect(self._show_tool_permission_dialog)
-        self.screenshot_requested.connect(self._capture_screenshot)
 
     def create_widgets(self) -> None:
         for index, (agent_id, agent) in enumerate(self.agents.items()):
@@ -88,65 +77,6 @@ class AgentManager(QObject):
         if self.import_dialog is not None:
             self.import_dialog.close()
         self.chat_history_window.close()
-
-    async def request_tool_permission(self, request) -> bool:
-        request_id = self._next_request_id()
-        event = threading.Event()
-        state = {"allowed": False}
-        self._permission_requests[request_id] = (event, state)
-        self.tool_permission_requested.emit({"id": request_id, "request": request})
-        await asyncio.to_thread(event.wait)
-        self._permission_requests.pop(request_id, None)
-        return bool(state.get("allowed"))
-
-    async def request_screenshot(self, request) -> dict:
-        request_id = self._next_request_id()
-        event = threading.Event()
-        state: dict = {}
-        self._screenshot_requests[request_id] = (event, state)
-        self.screenshot_requested.emit({"id": request_id, "request": request})
-        await asyncio.to_thread(event.wait)
-        self._screenshot_requests.pop(request_id, None)
-        if state.get("error"):
-            raise ValueError(state["error"])
-        return state
-
-    def _next_request_id(self) -> int:
-        self._request_counter += 1
-        return self._request_counter
-
-    def _show_tool_permission_dialog(self, payload: dict) -> None:
-        request_id = payload["id"]
-        request = payload["request"]
-        event, state = self._permission_requests.get(request_id, (None, None))
-        if event is None:
-            return
-        dialog = ToolPermissionDialog(request)
-        state["allowed"] = dialog.exec() == ToolPermissionDialog.DialogCode.Accepted
-        event.set()
-
-    def _capture_screenshot(self, payload: dict) -> None:
-        request_id = payload["id"]
-        event, state = self._screenshot_requests.get(request_id, (None, None))
-        if event is None:
-            return
-        screen = QApplication.primaryScreen()
-        if screen is None:
-            state["error"] = "未找到可截图的屏幕。"
-            event.set()
-            return
-        pixmap = screen.grabWindow(0)
-        output = Path(tempfile.gettempdir()) / f"desktop_agents_screenshot_{request_id}.png"
-        if not pixmap.save(str(output), "PNG"):
-            state["error"] = "截图保存失败。"
-            event.set()
-            return
-        state.update({
-            "path": str(output),
-            "width": pixmap.width(),
-            "height": pixmap.height(),
-        })
-        event.set()
 
     def show_chat_history(self) -> None:
         self.chat_history_window.show()

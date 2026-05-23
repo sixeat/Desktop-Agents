@@ -7,8 +7,6 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from core.agent import Agent
-from core.builtin_tools import default_sandbox
-from core.tooling import ScreenshotRequester, ToolCallRequest, ToolContext, ToolEventCallback, PermissionRequester
 
 
 @dataclass
@@ -41,8 +39,6 @@ class AgentBus:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._conversation_lock: asyncio.Lock | None = None
-        self.permission_requester: PermissionRequester | None = None
-        self.screenshot_requester: ScreenshotRequester | None = None
 
     def register(self, agent_id: str, agent: Agent) -> None:
         self.agents[agent_id] = agent
@@ -155,16 +151,8 @@ class AgentBus:
 
         history = self._build_history_messages()
         prompt = self._build_prompt(agent, prompt_kind, trigger_message)
-        tool_context = ToolContext(
-            agent_id=agent_id,
-            agent_name=agent.name,
-            sandbox=default_sandbox(),
-            permission_requester=self.permission_requester,
-            screenshot_requester=self.screenshot_requester,
-            tool_event_callback=self._on_tool_event,
-        )
         try:
-            reply = await agent.chat(prompt, history=history, tool_context=tool_context)
+            reply = await agent.chat(prompt, history=history)
         except Exception:
             reply = "我刚刚卡住了，请稍后再试。"
 
@@ -181,25 +169,6 @@ class AgentBus:
         )
         self.broadcast(message)
         return message
-
-    def _on_tool_event(self, event: str, request: ToolCallRequest, payload: dict | None) -> None:
-        labels = {
-            "permission_requested": "请求使用工具",
-            "permission_denied": "已拒绝工具",
-            "started": "开始执行工具",
-            "finished": "已完成工具",
-            "failed": "工具执行失败",
-        }
-        label = labels.get(event)
-        if not label:
-            return
-        self.broadcast(BusMessage(
-            sender="系统",
-            content=f"{request.agent_name} {label}：{request.tool_name}",
-            kind="tool",
-            agent_id=request.agent_id,
-            anchor_agent_id=request.agent_id,
-        ))
 
     def _lock(self) -> asyncio.Lock:
         if self._conversation_lock is None:
