@@ -22,6 +22,11 @@ class AgentBusTest(unittest.IsolatedAsyncioTestCase):
     def make_agent(self, persona_name, reply):
         return Agent(persona_name=persona_name, client=FakeClient(reply))
 
+    def test_default_history_limit_is_50(self):
+        bus = AgentBus()
+
+        self.assertEqual(bus.recent_history.maxlen, 50)
+
     def test_broadcast_notifies_subscribers_and_caps_history(self):
         bus = AgentBus(max_history=20)
         received = []

@@ -54,7 +54,7 @@ class OpenAICompatibleClient:
 
         try:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
-            async with aiohttp.ClientSession(headers=self.headers, timeout=timeout) as session:
+            async with aiohttp.ClientSession(headers=self.headers, timeout=timeout, trust_env=True) as session:
                 async with session.post(self.endpoint, json=payload) as resp:
                     if resp.status != 200:
                         return {"role": "assistant", "content": await self._http_error_message(resp)}
@@ -88,7 +88,7 @@ class OpenAICompatibleClient:
 
         try:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
-            async with aiohttp.ClientSession(headers=self.headers, timeout=timeout) as session:
+            async with aiohttp.ClientSession(headers=self.headers, timeout=timeout, trust_env=True) as session:
                 async with session.post(self.endpoint, json=payload) as resp:
                     if resp.status != 200:
                         yield await self._http_error_message(resp)

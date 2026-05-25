@@ -3,9 +3,9 @@ from collections.abc import Iterable
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
-    QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -15,52 +15,37 @@ from PyQt6.QtWidgets import (
 )
 
 from core.agent_bus import BusMessage
+from ui.theme import apply_cute_style
 
 
-class ChatHistoryWindow(QMainWindow):
-    clear_requested = pyqtSignal()
+class PetChatWindow(QMainWindow):
+    message_submitted = pyqtSignal(str)
 
-    def __init__(self, title: str = "群聊记录", subtitle: str = "最近消息", parent=None):
+    def __init__(self, agent_name: str, parent=None):
         super().__init__(parent)
-        self._title = title
-        self._subtitle = subtitle
+        self.agent_name = agent_name
         self._message_count = 0
         self._setup_window()
         self._setup_ui()
 
-    def _setup_window(self):
-        self.setWindowTitle(self._title)
-        self.resize(520, 680)
+    def _setup_window(self) -> None:
+        self.setWindowTitle(f"和{self.agent_name}聊天")
+        self.resize(560, 700)
+        apply_cute_style(self)
 
-    def _setup_ui(self):
+    def _setup_ui(self) -> None:
         central = QWidget(self)
         root = QVBoxLayout(central)
-        root.setContentsMargins(14, 14, 14, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
 
-        header = QHBoxLayout()
-        title_box = QVBoxLayout()
-        title = QLabel(self._title, self)
-        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #202124;")
-        subtitle = QLabel(self._subtitle, self)
-        subtitle.setStyleSheet("font-size: 12px; color: #6B7280;")
-        title_box.addWidget(title)
-        title_box.addWidget(subtitle)
-
-        clear_button = QPushButton("清空", self)
-        clear_button.clicked.connect(self.clear_requested.emit)
-        close_button = QPushButton("关闭", self)
-        close_button.clicked.connect(self.hide)
-        header.addLayout(title_box)
-        header.addStretch(1)
-        header.addWidget(clear_button)
-        header.addWidget(close_button)
-        root.addLayout(header)
+        self.title_label = QLabel(f"和{self.agent_name}聊天", self)
+        self.title_label.setStyleSheet("font-size: 22px; font-weight: 700; color: #111111;")
+        root.addWidget(self.title_label)
 
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("QScrollArea { border: 1px solid #E5E7EB; background: #F5F7FA; }")
-
+        self.scroll_area.setStyleSheet("QScrollArea { border: 1px solid #DADCE0; border-radius: 6px; background: #FFFFFF; }")
         self.message_container = QWidget(self.scroll_area)
         self.message_layout = QVBoxLayout(self.message_container)
         self.message_layout.setContentsMargins(12, 12, 12, 12)
@@ -68,6 +53,16 @@ class ChatHistoryWindow(QMainWindow):
         self.message_layout.addStretch(1)
         self.scroll_area.setWidget(self.message_container)
         root.addWidget(self.scroll_area, 1)
+
+        input_row = QHBoxLayout()
+        self.input = QLineEdit(self)
+        self.input.setPlaceholderText("和它说点什么，回车发送")
+        self.input.returnPressed.connect(self._submit_message)
+        send_button = QPushButton("发送", self)
+        send_button.clicked.connect(self._submit_message)
+        input_row.addWidget(self.input, 1)
+        input_row.addWidget(send_button)
+        root.addLayout(input_row)
         self.setCentralWidget(central)
 
     def load_messages(self, messages: Iterable[BusMessage]) -> None:
@@ -75,8 +70,8 @@ class ChatHistoryWindow(QMainWindow):
         for message in messages:
             self.append_message(message)
 
-    def append_message(self, msg: BusMessage) -> None:
-        row = self._create_message_row(msg)
+    def append_message(self, message: BusMessage) -> None:
+        row = self._create_message_row(message)
         self.message_layout.insertWidget(self.message_layout.count() - 1, row)
         self._message_count += 1
         QTimer.singleShot(0, self._scroll_to_bottom)
@@ -92,12 +87,23 @@ class ChatHistoryWindow(QMainWindow):
     def message_count(self) -> int:
         return self._message_count
 
+    def set_agent_name(self, agent_name: str) -> None:
+        self.agent_name = agent_name
+        self.setWindowTitle(f"和{self.agent_name}聊天")
+        self.title_label.setText(f"和{self.agent_name}聊天")
+
+    def _submit_message(self) -> None:
+        text = self.input.text().strip()
+        if not text:
+            return
+        self.input.clear()
+        self.message_submitted.emit(text)
+
     def _create_message_row(self, msg: BusMessage) -> QWidget:
         is_user = msg.kind == "user"
         row = QWidget(self)
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
-
         bubble_box = QVBoxLayout()
         bubble_box.setSpacing(4)
         bubble_box.setContentsMargins(0, 0, 0, 0)
@@ -113,21 +119,14 @@ class ChatHistoryWindow(QMainWindow):
         bubble.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         bubble.setMaximumWidth(360)
         if is_user:
-            bubble.setStyleSheet(
-                "QLabel { background: #95EC69; color: #111827; border-radius: 10px; padding: 8px 10px; font-size: 14px; }"
-            )
+            bubble.setStyleSheet("QLabel { background: #111111; color: #FFFFFF; border-radius: 8px; padding: 9px 12px; font-size: 14px; }")
         elif msg.kind == "system":
-            bubble.setStyleSheet(
-                "QLabel { background: #E5E7EB; color: #374151; border-radius: 10px; padding: 8px 10px; font-size: 13px; }"
-            )
+            bubble.setStyleSheet("QLabel { background: #F2F2F2; color: #333333; border-radius: 8px; padding: 8px 11px; font-size: 13px; }")
         else:
-            bubble.setStyleSheet(
-                "QLabel { background: #FFFFFF; color: #111827; border-radius: 10px; padding: 8px 10px; font-size: 14px; }"
-            )
+            bubble.setStyleSheet("QLabel { background: #FFFFFF; color: #111111; border: 1px solid #DADCE0; border-radius: 8px; padding: 9px 12px; font-size: 14px; }")
 
         bubble_box.addWidget(meta)
         bubble_box.addWidget(bubble)
-
         if is_user:
             row_layout.addStretch(1)
             row_layout.addLayout(bubble_box)
@@ -136,6 +135,6 @@ class ChatHistoryWindow(QMainWindow):
             row_layout.addStretch(1)
         return row
 
-    def _scroll_to_bottom(self):
+    def _scroll_to_bottom(self) -> None:
         bar = self.scroll_area.verticalScrollBar()
         bar.setValue(bar.maximum())

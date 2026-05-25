@@ -122,6 +122,28 @@ class ExtractWechatTest(unittest.TestCase):
         self.assertEqual(messages[0].content, "今晚打球吗")
         self.assertEqual(report.target_messages, 1)
 
+    def test_parses_weflow_txt_export(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_dir = Path(temp_dir)
+            txt_path = export_dir / "私聊_张斌.txt"
+            txt_path.write_text(
+                "2022-10-05 20:17:18 '张斌'\n"
+                "dd\n\n"
+                "2022-10-05 20:17:23 '我'\n"
+                "[转账]￥500.00\n\n"
+                "2022-10-05 20:17:50 '张斌'\n"
+                "送我走是吧\n\n"
+                "2022-10-05 20:18:25 '我'\n"
+                "滚滚滚\n",
+                encoding="utf-8",
+            )
+
+            messages, report = load_export_dir(export_dir, "张斌")
+
+        self.assertEqual([message.content for message in messages], ["dd", "[转账]￥500.00", "送我走是吧", "滚滚滚"])
+        self.assertEqual([message.is_from_target for message in messages], [True, False, True, False])
+        self.assertEqual(report.target_messages, 2)
+
     def test_wechat_importer_imports_local_export_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

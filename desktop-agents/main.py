@@ -1,5 +1,7 @@
+import argparse
 import sys
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
 from config import PERSONAS_DIR
@@ -7,8 +9,11 @@ from core.agent import Agent
 from core.agent_bus import AgentBus
 from core.llm_client import OpenAICompatibleClient
 from core.llm_settings import has_api_key, load_llm_settings, settings_to_client_kwargs
+from core.pet_registry import load_pet_configs, save_pet_configs
 from ui.agent_manager import AgentManager
 from ui.api_key_dialog import ApiKeyDialog
+from ui.agent_edit_dialog import AgentEditDialog
+from ui.pet_manager import PetManager
 
 
 def load_group_persona_names() -> list[str]:
@@ -25,12 +30,28 @@ def ensure_llm_configured() -> bool:
     return dialog.exec() == ApiKeyDialog.DialogCode.Accepted
 
 
-def main():
-    app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
+def run_pet_mode(app: QApplication, open_manager: bool = False) -> bool:
+    configs = load_pet_configs()
+    if not configs:
+        dialog = AgentEditDialog()
+        if dialog.exec() != AgentEditDialog.DialogCode.Accepted or dialog.config is None:
+            return False
+        configs = [dialog.config]
+        save_pet_configs(configs)
 
+    manager = PetManager(configs)
+    manager.create_widgets()
+    manager.show_all()
+    if open_manager:
+        QTimer.singleShot(300, manager.show_agent_management)
+    app.aboutToQuit.connect(manager.close)
+    app.pet_manager = manager
+    return True
+
+
+def run_agent_mode(app: QApplication) -> bool:
     if not ensure_llm_configured():
-        return
+        return False
 
     settings = load_llm_settings()
     client_kwargs = settings_to_client_kwargs(settings)
@@ -52,7 +73,27 @@ def main():
 
     app.aboutToQuit.connect(bus.stop)
     app.aboutToQuit.connect(manager.close)
+    app.agent_bus = bus
+    app.agent_manager = manager
     bus.start()
+    return True
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Desktop agents and pets")
+    parser.add_argument("--mode", choices=["pets", "agents"], default="pets")
+    parser.add_argument("--open-manager", action="store_true", help="Open Agent Management after startup")
+    return parser.parse_args(argv[1:])
+
+
+def main():
+    args = parse_args(sys.argv)
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+
+    started = run_agent_mode(app) if args.mode == "agents" else run_pet_mode(app, open_manager=args.open_manager)
+    if not started:
+        return
 
     sys.exit(app.exec())
 

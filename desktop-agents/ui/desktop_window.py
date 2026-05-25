@@ -28,7 +28,7 @@ class DesktopWindow(QMainWindow):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.MouseButton.LeftButton:
+        if event.buttons() & Qt.MouseButton.LeftButton and getattr(self, "_drag_pos", None) is not None:
             self.move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
         super().mouseMoveEvent(event)

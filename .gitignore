@@ -15,3 +15,7 @@ coverage/
 htmlcov/
 .vscode/
 .idea/
+WeFlow/
+agentxx/
+ltjl/
+package-lock.json

@@ -21,6 +21,12 @@ class ChatHistoryWindowTest(unittest.TestCase):
     def tearDown(self):
         self.app.processEvents()
 
+    def test_custom_title_and_subtitle_can_be_set(self):
+        window = ChatHistoryWindow("单聊记录", "最近 50 条")
+
+        self.assertEqual(window.windowTitle(), "单聊记录")
+        window.close()
+
     def test_load_messages_shows_existing_history(self):
         window = ChatHistoryWindow()
         messages = [

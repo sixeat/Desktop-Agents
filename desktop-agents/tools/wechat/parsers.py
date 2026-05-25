@@ -18,9 +18,10 @@ TIMESTAMP_COLUMNS = ("CreateTime", "createTime", "CreateTimeSvr", "timestamp", "
 TYPE_COLUMNS = ("Type", "MsgType", "type", "msgType")
 LOCAL_ID_COLUMNS = ("LocalId", "localId", "MsgSvrID", "msgId", "id")
 
-TEXT_PLACEHOLDERS = {"[图片]", "[语音]", "[视频]", "[文件]", "[动画表情]", "[表情]", "[位置]"}
+TEXT_PLACEHOLDERS = {"[图片]", "[语音]", "[视频]", "[文件]", "[动画表情]", "[表情]", "[表情包]", "[位置]"}
 XML_PREFIXES = ("<msg", "<appmsg", "<sysmsg", "<?xml")
 TEXT_EXPORT_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(.+?)\s+\[(.+?)\]\s*(.*)$")
+WEFLOW_TEXT_EXPORT_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+'(.+?)'\s*$")
 
 
 def load_messages(
@@ -352,7 +353,6 @@ def parse_export_timestamp(value: Any) -> int | None:
 
 
 def _load_text_export_messages(path: Path, wxid: str, self_wxid: str | None) -> list[ChatMessage]:
-    messages: list[ChatMessage] = []
     try:
         lines = path.read_text(encoding="utf-8-sig").splitlines()
     except UnicodeDecodeError:
@@ -363,6 +363,12 @@ def _load_text_export_messages(path: Path, wxid: str, self_wxid: str | None) -> 
     except OSError:
         return []
 
+    messages = _load_bracketed_text_export_messages(path, lines, wxid, self_wxid)
+    return messages or _load_weflow_text_export_messages(path, lines, wxid, self_wxid)
+
+
+def _load_bracketed_text_export_messages(path: Path, lines: list[str], wxid: str, self_wxid: str | None) -> list[ChatMessage]:
+    messages: list[ChatMessage] = []
     target_names = {wxid, path.stem}
     if self_wxid:
         target_names.discard(self_wxid)
@@ -377,19 +383,64 @@ def _load_text_export_messages(path: Path, wxid: str, self_wxid: str | None) -> 
         content = clean_message_text(content)
         if not content:
             continue
-        timestamp = parse_export_timestamp(time_text)
         sender = sender.strip()
         messages.append(ChatMessage(
             local_id=index,
             talker=path.stem,
             sender=sender,
             content=content,
-            timestamp=timestamp,
+            timestamp=parse_export_timestamp(time_text),
             is_from_target=sender in target_names,
             message_type=1,
             source=str(path),
         ))
     return messages
+
+
+def _load_weflow_text_export_messages(path: Path, lines: list[str], wxid: str, self_wxid: str | None) -> list[ChatMessage]:
+    messages: list[ChatMessage] = []
+    target_names = {wxid, path.stem, _strip_weflow_prefix(path.stem)}
+    if self_wxid:
+        target_names.discard(self_wxid)
+
+    index = 0
+    local_id = 1
+    while index < len(lines):
+        match = WEFLOW_TEXT_EXPORT_RE.match(lines[index].strip())
+        if not match:
+            index += 1
+            continue
+        time_text, sender = match.groups()
+        index += 1
+        content_lines: list[str] = []
+        while index < len(lines) and not WEFLOW_TEXT_EXPORT_RE.match(lines[index].strip()):
+            line = lines[index].strip()
+            if line:
+                content_lines.append(line)
+            index += 1
+        content = clean_message_text("\n".join(content_lines))
+        if not content:
+            continue
+        sender = sender.strip()
+        messages.append(ChatMessage(
+            local_id=local_id,
+            talker=_strip_weflow_prefix(path.stem),
+            sender=sender,
+            content=content,
+            timestamp=parse_export_timestamp(time_text),
+            is_from_target=sender in target_names,
+            message_type=1,
+            source=str(path),
+        ))
+        local_id += 1
+    return messages
+
+
+def _strip_weflow_prefix(value: str) -> str:
+    for prefix in ("私聊_", "群聊_"):
+        if value.startswith(prefix):
+            return value[len(prefix):]
+    return value
 
 
 def _sort_and_limit(messages: list[ChatMessage], limit: int) -> list[ChatMessage]:

@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
+from config import CHAT_UI_HISTORY_LIMIT
 from core.agent import Agent
 
 
@@ -22,7 +23,7 @@ class BusMessage:
 class AgentBus:
     def __init__(
         self,
-        max_history: int = 20,
+        max_history: int = CHAT_UI_HISTORY_LIMIT,
         auto_min_seconds: float = 5,
         auto_max_seconds: float = 10,
         followup_probability: float = 0.3,
