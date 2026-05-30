@@ -1,98 +1,172 @@
-CLEAN_STYLE = """
+AC_STYLE = """
 QDialog, QMainWindow {
-    background: #FFFFFF;
-    color: #111111;
-    font-family: "Microsoft YaHei";
+    background: #f8f8f0;
+    color: #725d42;
+    font-family: "Microsoft YaHei", "Nunito", sans-serif;
 }
 QLabel {
-    color: #111111;
+    color: #794f27;
 }
 QLineEdit, QTextEdit, QComboBox {
-    background: #FFFFFF;
-    border: 1px solid #D0D5DD;
-    border-radius: 6px;
-    padding: 7px 10px;
-    color: #111111;
-    selection-background-color: #DDEBFF;
+    background: rgb(247, 243, 223);
+    border: 3px solid #d4c9b4;
+    border-radius: 16px;
+    padding: 8px 14px;
+    min-height: 30px;
+    color: #725d42;
+    selection-background-color: #e6f9f6;
+    selection-color: #794f27;
 }
 QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
-    border: 1px solid #111111;
+    border: 3px solid #ffcc00;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 28px;
+}
+QComboBox QAbstractItemView {
+    background: rgb(247, 243, 223);
+    border: 3px solid #d4c9b4;
+    border-radius: 14px;
+    color: #725d42;
+    selection-background-color: #e6f9f6;
+    selection-color: #794f27;
 }
 QPushButton {
-    background: #FFFFFF;
-    border: 1px solid #B8BEC8;
-    border-radius: 6px;
-    padding: 7px 14px;
-    color: #111111;
+    background: #f8f8f0;
+    border: 3px solid #bdaea0;
+    border-radius: 20px;
+    padding: 10px 22px;
+    color: #794f27;
+    font-weight: 700;
 }
 QPushButton:hover {
-    background: #F5F5F5;
+    background: #fffef5;
+    border-color: #c9b8a8;
 }
 QPushButton:pressed {
-    background: #EAEAEA;
+    background: #ece8dc;
+    border-color: #a89988;
 }
 QPushButton:disabled {
-    background: #F5F5F5;
-    color: #9AA0A6;
-    border-color: #DADCE0;
+    background: #e8e4d8;
+    color: #b0a898;
+    border-color: #ccc4b8;
 }
 QPushButton#primaryButton {
-    background: #111111;
-    color: #FFFFFF;
-    border-color: #111111;
+    background: #19c8b9;
+    color: #ffffff;
+    border-color: #11a89b;
 }
 QPushButton#primaryButton:hover {
-    background: #333333;
+    background: #3dd4c6;
+    border-color: #19c8b9;
+}
+QPushButton#primaryButton:pressed {
+    background: #11a89b;
+    border-color: #0e8f84;
 }
 QGroupBox {
-    border: 1px solid #DADCE0;
-    border-radius: 8px;
-    margin-top: 12px;
-    padding: 14px 10px 10px 10px;
-    background: #FFFFFF;
-    color: #111111;
+    border: 3px solid #d4c9b4;
+    border-radius: 20px;
+    margin-top: 16px;
+    padding: 18px 16px 14px 16px;
+    background: rgb(247, 243, 223);
+    color: #794f27;
     font-weight: 700;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 12px;
-    padding: 0 6px;
-    background: #FFFFFF;
+    left: 16px;
+    padding: 0 10px;
+    background: rgb(247, 243, 223);
 }
 QTableWidget {
-    background: #FFFFFF;
-    alternate-background-color: #FAFAFA;
-    border: 1px solid #DADCE0;
-    border-radius: 6px;
-    gridline-color: #EAECF0;
-    color: #111111;
+    background: rgb(247, 243, 223);
+    alternate-background-color: #f0ece0;
+    border: 3px solid #d4c9b4;
+    border-radius: 16px;
+    gridline-color: #e0d8c8;
+    color: #725d42;
+    selection-background-color: #e6f9f6;
+    selection-color: #794f27;
 }
 QHeaderView::section {
-    background: #F5F5F5;
+    background: #e6f9f6;
     border: none;
-    border-right: 1px solid #DADCE0;
-    padding: 7px;
-    color: #111111;
+    border-right: 3px solid #d4c9b4;
+    padding: 10px;
+    color: #794f27;
     font-weight: 700;
 }
 QScrollArea {
-    border: 1px solid #DADCE0;
-    border-radius: 6px;
-    background: #FFFFFF;
+    border: 3px solid #d4c9b4;
+    border-radius: 16px;
+    background: rgb(247, 243, 223);
 }
 QCheckBox {
-    color: #111111;
+    color: #794f27;
+}
+QTextEdit {
+    background: rgb(247, 243, 223);
+}
+QMenu {
+    background: rgb(247, 243, 223);
+    border: 3px solid #d4c9b4;
+    border-radius: 14px;
+    padding: 8px;
+}
+QMenu::item {
+    padding: 8px 22px;
+    border-radius: 10px;
+    color: #794f27;
+}
+QMenu::item:selected {
+    background: #e6f9f6;
+    color: #794f27;
+}
+QMenu::separator {
+    height: 3px;
+    background: #d4c9b4;
+    margin: 8px 12px;
 }
 """
 
 
 def apply_cute_style(widget) -> None:
-    widget.setStyleSheet(CLEAN_STYLE)
+    widget.setStyleSheet(AC_STYLE)
 
 
 def title_style() -> str:
-    return "font-size: 20px; font-weight: 700; color: #111111;"
+    return "font-size: 20px; font-weight: 700; color: #794f27;"
 
 
 def hint_style() -> str:
-    return "font-size: 12px; color: #555555; line-height: 150%;"
+    return "font-size: 12px; color: #9f927d; line-height: 150%;"
+
+
+def _rounded_pixmap(source: "QPixmap", size: int = 64, radius: int = 12) -> "QPixmap":
+    from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
+    from PyQt6.QtCore import Qt
+
+    scaled = source.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+    result = QPixmap(size, size)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, size, size, radius, radius)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, scaled)
+    painter.end()
+    return result
+
+
+def set_window_icon(window) -> None:
+    from PyQt6.QtGui import QIcon, QPixmap
+    from config import ICON_PATH
+
+    if ICON_PATH.exists():
+        pixmap = QPixmap(str(ICON_PATH))
+        if not pixmap.isNull():
+            window.setWindowIcon(QIcon(_rounded_pixmap(pixmap, 64, 14)))

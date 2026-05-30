@@ -16,3 +16,4 @@ htmlcov/
 .idea/
 models/desktop_agents.json
 models/pet_personas/
+models/runtime/

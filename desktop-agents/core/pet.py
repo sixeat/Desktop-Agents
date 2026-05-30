@@ -30,6 +30,7 @@ class PetConfig:
     avatar_path: str | None = None
     persona_path: str | None = None
     mood_avatar_paths: dict[str, str] = field(default_factory=dict)
+    deployed: bool = True
 
     @property
     def identity(self) -> str:

@@ -36,7 +36,8 @@ class PersonalityTrainerTest(unittest.TestCase):
         self.assertIn("😊", profile.emoji_habits)
         self.assertEqual(profile.greeting_style, "早安问候")
         self.assertGreater(profile.avg_sentence_length, 0)
-        self.assertIn("不要说自己是AI", profile.system_prompt)
+        self.assertIn("参考授权聊天风格生成", profile.system_prompt)
+        self.assertIn("不是聊天记录中的真人", profile.system_prompt)
 
     def test_analyze_keeps_wechat_text_emoji_habits(self):
         messages = ["哈哈哈你是真的离谱[旺柴]", "我服了[偷笑]", "可以啊😂", "我发了[位置]和[链接]"]

@@ -1,10 +1,18 @@
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import AsyncIterator
 
 import aiohttp
 
 from core.llm_settings import load_llm_settings
+
+
+@dataclass(frozen=True)
+class LLMValidationResult:
+    ok: bool
+    message: str
+    status: int | None = None
 
 
 class OpenAICompatibleClient:
@@ -74,6 +82,34 @@ class OpenAICompatibleClient:
         message = await self.complete(messages, temperature=temperature)
         return str(message.get("content") or "")
 
+    async def validate_api_key(self) -> LLMValidationResult:
+        if not self.api_key:
+            return LLMValidationResult(False, f"{self.provider} API Key 未配置，请先填写。")
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "temperature": 0,
+            "stream": False,
+            "max_tokens": 1,
+        }
+        try:
+            timeout = aiohttp.ClientTimeout(total=min(self.timeout, 12))
+            async with aiohttp.ClientSession(headers=self.headers, timeout=timeout, trust_env=True) as session:
+                async with session.post(self.endpoint, json=payload) as resp:
+                    if resp.status != 200:
+                        return LLMValidationResult(False, await self._validation_error_message(resp), resp.status)
+                    data = await resp.json()
+                    choices = data.get("choices") if isinstance(data, dict) else None
+                    if not choices:
+                        return LLMValidationResult(False, "服务返回格式异常。", resp.status)
+                    return LLMValidationResult(True, "验证成功，API Key 可用。", resp.status)
+        except asyncio.TimeoutError:
+            return LLMValidationResult(False, "验证超时，请稍后再试。")
+        except aiohttp.ClientError:
+            return LLMValidationResult(False, "网络请求失败，请检查网络或代理。")
+        except (json.JSONDecodeError, TypeError):
+            return LLMValidationResult(False, "服务返回格式异常。")
+
     async def chat_stream(self, messages: list[dict], temperature: float = 0.7) -> AsyncIterator[str]:
         if not self.api_key:
             yield self._missing_api_key_message()
@@ -125,6 +161,17 @@ class OpenAICompatibleClient:
         if detail:
             return f"LLM 请求失败（HTTP {resp.status}）。"
         return f"LLM 请求失败（HTTP {resp.status}）。"
+
+    async def _validation_error_message(self, resp: aiohttp.ClientResponse) -> str:
+        if resp.status in {401, 403}:
+            return "认证失败，请检查 API Key。"
+        if resp.status == 404:
+            return "接口或模型不存在，请检查 Base URL 和 Model。"
+        if resp.status == 429:
+            return "请求过于频繁或额度受限。"
+        if 500 <= resp.status:
+            return "LLM 服务暂时不可用。"
+        return f"验证失败（HTTP {resp.status}）。"
 
     async def close(self):
         return None

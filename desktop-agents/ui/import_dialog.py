@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.importer.wechat_importer import WeChatImporter
+from ui.theme import set_window_icon
 
 
 class ImportThread(QThread):
@@ -72,6 +73,7 @@ class WeChatImportDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("导入聊天记录人格")
         self.setMinimumSize(560, 520)
+        set_window_icon(self)
         self.importer = WeChatImporter(output_dir=output_dir)
         self.worker: ImportThread | FileImportThread | None = None
         self.setup()

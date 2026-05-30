@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.personality_trainer import PersonalityTrainer
+from ui.theme import set_window_icon
 from core.pet import PetConfig, PERSONALITY_TAGS, available_pet_definitions
 
 
@@ -25,6 +26,7 @@ class PetSelectorDialog(QDialog):
         self._selected_pets: list[PetConfig] = []
         self.setWindowTitle("选择桌面萌宠")
         self.setMinimumSize(420, 300)
+        set_window_icon(self)
         self._setup()
 
     def _setup(self) -> None:

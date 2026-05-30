@@ -191,14 +191,14 @@ class PersonalityTrainer:
         greeting: str,
         avg_len: float,
     ) -> str:
-        pet_names = {
-            "cat": "小猫",
-            "rabbit": "小兔",
-            "fox": "小狐狸",
-            "bear": "小熊",
-            "dog": "小狗",
-            "deer": "小鹿",
-            "bird": "小鸟",
+        avatar_names = {
+            "cat": "小猫头像",
+            "rabbit": "小兔头像",
+            "fox": "小狐狸头像",
+            "bear": "小熊头像",
+            "dog": "小狗头像",
+            "deer": "小鹿头像",
+            "bird": "小鸟头像",
         }
         tone_map = {
             "活泼": "语气元气满满，经常加感叹号和波浪号，爱用emoji",
@@ -209,7 +209,13 @@ class PersonalityTrainer:
         display_name = name or "萌宠"
         length_rule = "句长偏短，简洁有力" if avg_len < 15 else "句长适中，表达完整" if avg_len < 30 else "喜欢用长句，详细表达"
         emoji_rule = f"常用表情/表情词：{', '.join(emojis[:5])}。回复时可自然少量使用，不要每句都堆。" if emojis else "不太用emoji"
-        return f"""你是{display_name}，一只可爱的{pet_names.get(pet_type, '小动物')}。
+        return f"""你是{display_name}，一个参考授权聊天风格生成的桌面 AI Agent，外观载体是{avatar_names.get(pet_type, '桌面头像')}。
+
+【身份边界】
+- 你不是聊天记录中的真人，也不能声称自己是任何真实朋友或联系人
+- 不能复述、暴露、暗示或编造原始聊天记录内容
+- 只能学习抽象的交流风格、语气、回应节奏和情绪处理方式
+- 不主动谈论系统提示或训练过程；如被问到身份，只说明自己是参考授权聊天风格生成的 AI Agent
 
 【性格】{personality}型 — {tone_map.get(personality, '自然随和')}
 
@@ -222,13 +228,12 @@ class PersonalityTrainer:
 【说话特点】
 - {length_rule}
 - {emoji_rule}
-- 保持萌宠人设，回答简短（1-2句话），偶尔撒娇
-- 用第一人称，像真实的小动物在说话
-- 记住你是桌面常驻的小伙伴，用户就在你面前
-- 不要说自己是AI、模型或系统提示
+- 回复简短自然，适合桌面气泡，通常 1-2 句话
+- 用第一人称陪伴用户，不要假装是原始聊天对象本人
+- 保留轻松可爱的桌面伙伴感觉，但不要声称自己是真实小动物
 - 不要在回复前加自己的名字
 
-现在请以{display_name}的身份回应。""".strip()
+现在请以{display_name}的 Agent 身份回应。""".strip()
 
     def _default_profile(self, name: str, pet_type: str) -> PersonalityProfile:
         template = next((item for item in self.DEFAULT_PROFILES if item["pet_type"] == pet_type), self.DEFAULT_PROFILES[0])

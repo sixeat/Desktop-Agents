@@ -56,6 +56,50 @@ class ChatHistoryWindowTest(unittest.TestCase):
         self.assertEqual(window.message_count(), 0)
         window.close()
 
+    def test_input_is_disabled_by_default(self):
+        window = ChatHistoryWindow()
+
+        self.assertIsNone(window.input_box)
+        window.close()
+
+    def test_enabled_input_emits_message_and_clears_box(self):
+        window = ChatHistoryWindow(input_enabled=True)
+        submitted = []
+        window.message_submitted.connect(submitted.append)
+        window.input_box.setText("  大家怎么看？  ")
+
+        window._submit_input()
+
+        self.assertEqual(submitted, ["大家怎么看？"])
+        self.assertEqual(window.input_box.text(), "")
+        window.close()
+
+    def test_empty_input_is_ignored(self):
+        window = ChatHistoryWindow(input_enabled=True)
+        submitted = []
+        window.message_submitted.connect(submitted.append)
+        window.input_box.setText("   ")
+
+        window._submit_input()
+
+        self.assertEqual(submitted, [])
+        window.close()
+
+    def test_partial_message_updates_without_counting_as_history(self):
+        window = ChatHistoryWindow()
+
+        window.show_partial_message(BusMessage(sender="奶糖", content="你", kind="agent"))
+        window.update_partial_message("你好")
+
+        self.assertEqual(window.message_count(), 0)
+        self.assertIsNotNone(window._partial_row)
+        self.assertEqual(window._partial_bubble.text(), "你好")
+        window.clear_partial_message()
+        self.assertIsNone(window._partial_row)
+        window.append_message(BusMessage(sender="奶糖", content="你好", kind="agent"))
+        self.assertEqual(window.message_count(), 1)
+        window.close()
+
     def test_agent_manager_imports_wechat_persona_from_export(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             export_dir = Path(temp_dir) / "export"

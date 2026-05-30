@@ -1,27 +1,22 @@
 # Desktop Agents 开发文档
 
-> 日期：2026-05-24
+> 日期：2026-05-27
 
-本文档记录当前实现状态和维护视角。当前代码已从“带工具执行的桌面 Agent”收缩为“轻量桌面多 Agent 聊天应用”。项目核心目标是从用户和朋友的聊天记录中蒸馏出“我”或“朋友”的人格 Agent，并用桌面宠物/头像形象承载这些人格。
+本文档面向开发者，记录当前架构、核心模块、调用链、测试和维护约定。每日进度请看 `PROGRESS.md`，用户操作说明请看 `AGENT_WORK_GUIDE.md`。
 
-## 1. 当前开发目标
+## 1. 项目定位
 
-当前目标是围绕轻量桌面多 Agent 聊天应用收敛 1.0 范围：
+Desktop Agents 是轻量桌面多 Agent 聊天应用。项目主线是：
 
-1. 以“聊天记录 → 人格 Agent → 桌面形象承载”为产品主线。
-2. 默认启动桌面人格 Agent 模式，当前支持持久化单 Agent 管理和自定义情绪 PNG 形象。
-3. 保留桌面 Agent 的拖动、点击、情绪、气泡交互，并支持正常/开心/难过/困/惊讶/生气 6 张 PNG 随情绪切换。
-4. 保留人格训练、默认人格和人格 × 情绪联动。
-5. 保留单 Agent 聊天窗口和多 Agent 自动群聊。
-6. 保留群聊记录和单 Agent 记录，并各自只保留最近 50 条。
-7. 支持默认桌面 Agent 从 `.json/.txt/.csv` 聊天导出文件导入人格。
-8. 保留 API Key / OpenAI-compatible 基础配置。
-9. 后续支持自定义宠物/头像形象。
-10. 保留旧版 `--mode agents` 作为兼容模式。
-11. 删除工具执行、权限分级、截图等过度设计能力。
-12. 暂不推送，等用户确认 1.0 后再提交、打标签、推送。
+```text
+聊天记录 -> 人格 Agent -> 桌面宠物/头像形象承载 -> 单聊/群聊/记忆陪伴
+```
 
-## 2. 当前核心调用链
+宠物/头像不是产品本体，而是人格 Agent 的默认可视化载体。后续可以替换为自定义宠物、头像或其他桌面形象。
+
+当前默认运行模式是 `pets`，旧版头像 Agent 模式保留在 `--mode agents`。
+
+## 2. 运行入口
 
 ### 默认桌面人格 Agent 模式
 
@@ -33,53 +28,9 @@ main.py
   -> PetManager
   -> PetWidget
   -> PetCompanion
-  -> EmotionEngine
-  -> PersonalityProfile / PersonalityTrainer
-  -> OpenAICompatibleClient（仅配置 API Key 后）
-```
-
-单 Agent 聊天流程：
-
-```text
-PetWidget 双击
-  -> PetWidget.chat_window_requested
-  -> PetManager.show_pet_chat_window()
-  -> PetChatWindow.message_submitted
-  -> PetManager._on_pet_chat_requested()
-  -> 记录用户消息到 direct_histories[widget]
-  -> 无 API Key: PetCompanion.handle_interaction("chat", text)
-  -> 有 API Key: PetManager._chat_with_llm(..., channel="direct")
-  -> PetCompanion.chat()
-  -> PetManager._show_chat_response(..., "direct")
-  -> 更新 mood / 气泡 / 单 Agent 记录 / 可见聊天窗口
-```
-
-右键 `和它说话` 仍保留为单条输入弹窗备用入口，后续同样进入 `PetManager._on_pet_chat_requested()`。
-
-默认模式人格导入流程：
-
-```text
-PetWidget 右键“导入人格”
-  -> PetWidget.persona_import_requested
-  -> PetManager.import_persona_for_pet()
-  -> PetPersonaImportDialog
-  -> pet_persona_importer.load_profile_from_export()
-  -> tools.wechat.parsers.load_export_dir()
-  -> PersonalityTrainer.analyze()
-  -> pet_persona_importer.save_pet_persona()
-  -> PetCompanion.apply_profile()
-  -> PetManager._show_chat_response(..., "direct")
-```
-
-自动群聊流程：
-
-```text
-PetManager.start_auto_chat()
-  -> PetManager.run_auto_chat_once()
-  -> 无 API Key: PetCompanion.handle_interaction("group_chat", prompt)
-  -> 有 API Key: PetManager._chat_with_llm(..., channel="group")
-  -> PetManager._show_chat_response(..., "group")
-  -> 更新 mood / 气泡 / group_history
+  -> ReplyRouter
+  -> ChatStorage / ExplicitMemoryStore
+  -> OpenAICompatibleClient（配置 API Key 后）
 ```
 
 ### 旧版头像 Agent 模式
@@ -96,70 +47,133 @@ main.py
   -> AgentWidget
 ```
 
-旧版群聊流程：
+旧版模式保留兼容，但当前产品重心在默认桌面人格 Agent 模式。
+
+## 3. 核心聊天链路
+
+### 单 Agent 聊天
 
 ```text
-AgentBus.speak_once()
-  -> Agent.chat()
-  -> OpenAICompatibleClient.chat()
-  -> OpenAICompatibleClient.complete()
-  -> BusMessage
-  -> AgentManager / ChatHistoryWindow
+PetWidget 双击
+  -> PetWidget.chat_window_requested
+  -> PetManager.show_pet_chat_window()
+  -> PetChatWindow.message_submitted
+  -> PetManager._on_pet_chat_requested()
+  -> 写入 direct_histories 和 SQLite direct channel
+  -> ExplicitMemoryStore.remember_user_message()
+  -> ReplyRouter.decide()
+  -> 无 API Key: LocalReplyBackend.reply()
+  -> 有 API Key: CloudReplyBackend.reply_stream()
+  -> PetManager 逐字更新桌面气泡和聊天窗口 partial 行
+  -> 最终 PetResponse 只持久化一次
 ```
 
-当前 `Agent` 不再持有工具注册表，也不再处理 `tool_calls`。
+维护约定：
 
-## 3. 关键模块说明
+- 流式 partial 只更新 UI，不写入 SQLite。
+- 最终回复只写入一条 Agent 消息。
+- direct 消息必须带当前 Agent identity，避免多个同类型 Agent 串记录。
+
+### 多 Agent 自动群聊
+
+```text
+PetManager.start_auto_chat()
+  -> 检查用户是否暂停自动群聊
+  -> 根据手动间隔或当前发言 Agent 性格决定下一次群聊间隔
+  -> 夜间 22:00-08:00 自动放大间隔
+  -> PetManager.run_auto_chat_once()
+  -> ReplyRouter.decide()
+  -> 无 API Key: LocalReplyBackend.reply()
+  -> 有 API Key: CloudReplyBackend.reply_stream(..., channel="group")
+  -> PetManager 逐字更新桌面气泡和群聊 partial 行
+  -> 最终 PetResponse 只持久化一次
+  -> 写入 group_history 和 SQLite group channel
+```
+
+维护约定：
+
+- group 记录和 direct 记录必须分离。
+- 自动群聊的 Agent 回复不应写入某个 Agent 的 direct 历史。
+- 默认群聊间隔由 `core/personality_rhythm.py` 控制。
+- `_auto_chat_interval_override_ms` 为会话级手动间隔，优先级高于性格化随机间隔。
+- `_auto_chat_paused_by_user` 表示用户显式暂停，`show_all()`、新增 Agent、切换出战都不能绕过它自动重启群聊。
+- 夜间 22:00-08:00 会通过 `_effective_auto_chat_interval()` 降低频率，并只对自动群聊 response 应用 sleepy mood。
+
+### 人格导入
+
+```text
+PetWidget 右键“导入人格”
+  -> PetWidget.persona_import_requested
+  -> PetManager.import_persona_for_pet()
+  -> PetPersonaImportDialog
+  -> pet_persona_importer.load_profile_from_export()
+  -> tools.wechat.parsers.load_export_dir()
+  -> PersonalityTrainer.analyze()
+  -> pet_persona_importer.save_pet_persona()
+  -> PetCompanion.apply_profile()
+  -> PetManager._show_chat_response(..., "direct")
+```
+
+维护约定：
+
+- 只保存蒸馏后的人格档案和 prompt。
+- 不保存原始聊天记录文本。
+- `聊天记录里的联系人` 和 `导入后 Agent 名称` 是两个概念，不能混用。
+
+## 4. 关键模块
 
 ### `core/pet.py`
 
-负责桌面人格 Agent 的当前默认形象定义。这里的 pet 是现阶段的视觉载体，不代表产品目标是纯宠物应用：
+桌面人格 Agent 的基础配置：
 
 - `PetMood`
 - `PetDefinition`
 - `PetConfig`
-- 当前内置形象类型列表
+- 默认形象类型
 - 默认性格映射
 - 可选性格标签
 
 ### `core/personality_trainer.py`
 
-负责从聊天文本生成“我”或“朋友”的人格档案，是项目主线“聊天记录蒸馏人格 Agent”的核心模块：
+聊天记录蒸馏人格的核心模块：
 
 - `PersonalityProfile`
 - `PersonalityTrainer.analyze()`
 - 默认人格 `_default_profile()`
 - System Prompt 构建
 - JSON save/load
-- 兼容现有 `core/personality.py` 的字典输出
 
-依赖策略：`jieba` 是可选依赖；没有安装时使用正则 fallback，不阻塞默认应用启动。
+`jieba` 是可选依赖；没有安装时使用正则 fallback。
 
 ### `core/pet_persona_importer.py`
 
-默认桌面 Agent 人格导入适配层：
+人格导入适配层：
 
-- 接收用户选择的 `.json` / `.txt` / `.csv` 文件或目录。
-- 复用 `tools.wechat.parsers.load_export_dir()` 解析聊天导出。
-- 优先使用目标联系人消息；目标消息太少时 fallback 到可读取的全部文本消息。
-- 调用 `PersonalityTrainer.analyze()` 生成 `PersonalityProfile`。
-- `save_pet_persona()` 将蒸馏后的人格档案保存为 `persona.json`。
-- `safe_persona_slug()` 生成保存目录名。
-
-维护约定：只保存人格档案和 prompt，不保存原始聊天文本。
+- 接收 `.json` / `.txt` / `.csv` 文件或目录。
+- 复用 `tools.wechat.parsers.load_export_dir()`。
+- 优先使用目标联系人消息；目标消息太少时 fallback 到全部可读取文本消息。
+- 生成并保存 `PersonalityProfile`。
 
 ### `core/emotion.py`
 
-负责情绪识别和情绪提示：
+情绪识别和情绪提示：
 
-- `EmotionSignal`
-- `EmotionState`
-- `EmotionEngine.analyze()`
-- `mood_for_text()`
-- `decay()`
-- `mood_prompt()`
+- 支持 normal / happy / sad / sleepy / angry / surprised。
+- 根据用户输入和人格标签调整情绪倾向。
+- 为 LLM prompt 提供 mood prompt。
 
-当前支持 normal / happy / sad / sleepy / angry / surprised，并按人格标签调整情绪倾向。
+### `core/personality_rhythm.py`
+
+性格化节奏参数：
+
+- `RhythmProfile`
+- `RHYTHM_TABLE`
+- `get_rhythm()`
+- `get_typing_delay()`
+- `get_chat_interval()`
+- `get_thinking_time()`
+
+当前规则：所有性格都严格逐字输出，每次只显示 1 个字；性格差异体现在单字间隔、波动、思考时间、群聊间隔和最大回复长度。
 
 ### `core/pet_companion.py`
 
@@ -167,326 +181,236 @@ AgentBus.speak_once()
 
 - 维护 `PetConfig`、人格档案、情绪引擎和当前情绪。
 - `handle_interaction()` 处理本地点击、打招呼、群聊和无 Key 聊天。
-- `chat()` 处理 LLM 聊天，有异常时 fallback 本地回复。
-- `build_messages()` 将人格 prompt 和当前 mood 注入 LLM 上下文。
-- `apply_profile()` 在人格导入后替换当前人格、清理旧上下文并重置情绪。
+- `chat()` 处理非流式 LLM 聊天，异常时 fallback 本地回复。
+- `build_messages()` 注入人格 prompt、当前 mood、显式记忆和性格化回复长度约束。
+- `remember_exchange()` 支持流式完成后只记录一次完整对话轮次。
 - `history` 只作为 LLM 上下文历史，受 `PET_CHAT_HISTORY_LIMIT` 控制。
 
-维护约定：不要把 UI 详细聊天记录写入 `PetCompanion.history`。
+维护约定：不要把 UI 详细聊天记录直接当作无限上下文塞进 `PetCompanion.history`。
 
-### `core/pet_registry.py`
+### `core/reply_router.py`
 
-负责桌面人格 Agent 配置持久化：
+本地/云端回复路由：
 
-- 保存和读取 `models/desktop_agents.json`。
-- 为每个 Agent 补齐稳定 `agent_id`。
-- 兼容旧配置的颜色 tuple/list 转换。
-- 保存头像路径、人格路径和 6 情绪 PNG 路径。
+- `ReplyRequest`
+- `RouteDecision`
+- `ReplyRouter`
+- `CloudReplyBackend`
+- `LocalReplyBackend`
+- `CloudReplyBackend.reply_stream()`
 
-### `ui/agent_edit_dialog.py`
+当前兼容策略：默认模式有 API Key 走云端，无 API Key 走本地；用户也可以在 API 设置里选择 `local_only`，强制运行时聊天不发送到云端。
 
-单 Agent 新建/编辑弹窗：
+中期扩展方向（尚未实现）：
 
-- 设置 Agent 名称、基础类型和性格标签。
-- 支持正常、开心、难过、困、惊讶、生气 6 张 PNG。
-- 新建时可选择创建后立即导入人格。
+```text
+ReplyRouter
+  -> CloudReplyBackend（当前 API 路径）
+  -> LocalModelBackend（未来本地模型服务）
+  -> LocalReplyBackend（当前模板兜底）
+```
 
-### `ui/agent_management_dialog.py`
+目标是让 `LocalModelBackend` 独立于当前模板本地回复，优先接本机 localhost/OpenAI-compatible 服务，例如 Ollama 或 llama.cpp server。未来设置可包括 `local_model/enabled`、`local_model/base_url`、`local_model/model`、timeout 和 health status。健康检查必须非阻塞并缓存状态，启动时本地服务不可用不能卡住桌面应用。
 
-托盘 `Agent 管理` 窗口：
+未来路由模式可以扩展为：
 
-- 列出当前 Agent 的名称、类型、性格、形象和人格状态。
-- 触发新建、编辑、删除、导入人格、更换形象和打开聊天。
-- 实际状态变更由 `PetManager` 统一处理。
+- `local_only`：只走本地模型/模板，不发送运行时聊天上下文到云端。
+- `cloud_when_key`：当前默认兼容模式，有 Key 走云端。
+- `local_preferred`：本地模型可用时优先本地，失败再考虑云端。
+- `cloud_preferred`：云端优先，失败后走本地模型/模板。
 
-### `ui/pet_selector_dialog.py`
+隐私边界：人格导入和包生成默认本地处理，不上传原始聊天；运行时云端回复会发送当前对话、人格 prompt、最近历史和相关记忆给配置的 provider。
 
-旧版固定 3 个桌面人格 Agent 选择器，当前保留为备用入口和兼容测试。
+### `core/chat_storage.py`
 
-### `ui/pet_widget.py`
+SQLite 聊天持久化：
 
-桌面人格 Agent 桌面表现层：
+- direct/group 分通道保存。
+- 每个单聊按 Agent identity 隔离。
+- 启动时加载最近 50 条用于 UI 和 LLM 上下文恢复。
+- 使用短连接，避免 Windows 下 SQLite 文件锁影响测试清理。
 
-- 绘制当前默认圆形形象、表情和名字标签。
-- 可加载 6 情绪 PNG 形象，路径来自 `PetConfig.mood_avatar_paths`。
-- 加载头像时会把与图片边缘连通的近白色背景抠成透明，保留角色内部白色细节。
-- 未配置或图片不可读时回退到默认彩色圆形。
-- 呼吸动画。
-- 情绪弹跳动画。
-- 静态 PNG 情绪动作：开心摇摆、难过下沉、困倦轻晃、惊讶上跳、生气抖动。
-- 鼠标拖动。
-- 左键点击反馈。
-- 双击打开单 Agent 聊天窗口。
-- 桌面气泡展示。
-- 右键菜单：打招呼、和它说话、聊天记录、导入人格、切换情绪、退出。
+### `core/explicit_memory.py`
+
+显式记忆提取和召回：
+
+- 从用户消息提取 preference / plan / event / fact。
+- 支持相关记忆召回。
+- 支持定时 follow-up。
+- 过滤密码、验证码、token、API Key、密钥等敏感信息。
+
+### `core/llm_client.py`
+
+OpenAI-compatible LLM 客户端：
+
+- `complete()`：非流式回复。
+- `chat()`：返回文本。
+- `chat_stream()`：解析 SSE delta 并 yield 文本片段。
+- `validate_api_key()`：发送最小请求验证 Key 可用性。
+- 请求使用 `trust_env=True`，支持系统代理环境。
+
+### `core/llm_settings.py`
+
+LLM 配置读取和保存：
+
+- 环境变量优先。
+- API Key 优先保存到系统凭据管理器。
+- keyring 不可用时 fallback 到当前 Windows 用户级 `QSettings`。
+- Provider / Base URL / Model 保存到 `QSettings`。
+- 不写入项目 `.env`。
+
+## 5. LoRA 数据集导出
+
+当前实现到 LoRA 第二阶段：导出/预览训练数据，并提供离线训练脚本；桌面 Agent 推理接入仍未实现。
+
+```text
+tools.export_lora_dataset
+  -> tools.wechat.parsers.load_messages()/load_export_dir()
+  -> core.lora_dataset.build_lora_dataset()
+  -> core.lora_dataset.write_lora_jsonl()
+
+tools.preview_lora_dataset
+  -> core.lora_dataset.read_lora_jsonl()
+  -> core.lora_dataset.format_lora_preview()
+
+tools.train_lora
+  -> core.lora_dataset.read_lora_jsonl()
+  -> validate_lora_examples()
+  -> lazy import torch/transformers/peft
+  -> PEFT LoRA training
+  -> models/lora_adapters/<name>/
+```
+
+维护约定：
+
+- `core/lora_dataset.py` 保持纯函数，负责消息清洗、敏感内容过滤、user/assistant 配对和 JSONL 写入。
+- 复用 `tools.wechat.parsers.clean_message_text()` 过滤媒体占位、XML 和非文本。
+- 复用 `core.explicit_memory.ExplicitMemoryStore.SENSITIVE_PATTERN` 过滤密码、验证码、token、API Key、`sk-...` 和长密钥。
+- 目标联系人消息映射为 `assistant`，非目标消息映射为 `user`。
+- 只导出有上一条 user 上下文的目标回复，跳过 target-only monologue。
+- `tools/export_lora_dataset.py` 必须默认拒绝覆盖输出文件，并在非 quiet 模式打印隐私提示。
+- `tools/train_lora.py` 顶层不能 import `torch`、`transformers`、`peft`、`datasets`；训练依赖只能在训练路径懒加载。
+- 训练依赖放在 `requirements-train.txt`，不加入主 `requirements.txt`。
+- `--validate-only` 必须不检查 ML 依赖，方便普通环境验证数据集。
+- 训练脚本第一版使用 full-sequence SFT；后续可优化为 assistant-only loss masking。
+
+长期风格学习路线（尚未接入运行时）：
+
+- 普通用户界面应称为“本机学习风格 / 风格增强”，不要直接暴露 LoRA、rank、batch size、量化等术语。
+- 人格包里的 `examples.jsonl` 是安全迁移种子；真正训练前需要更强的匿名对话轮次抽取、授权确认和人工预览。
+- 训练前评测需要覆盖 PII、原始样本复述、n-gram/相似度重叠、真实身份冒充声明、源聊天引用等风险。
+- 未来 `adapter/` 需要记录 base model、adapter version、dataset/package hash、创建时间、兼容 runtime 和迁移信息。
+- LoRA adapter 运行时依赖中期本地模型后端；在没有 LocalModelBackend 前，不应把 adapter 接进 `ReplyRouter`。
+- 跨电脑迁移应优先使用脱敏人格包重新学习，而不是把原始聊天记录或不可解释的本地缓存一起复制。
+
+## 6. UI 模块
 
 ### `ui/pet_manager.py`
 
-默认桌面人格 Agent 模式的主控制器：
+默认模式主控制器：
 
-- 创建和定位 `PetWidget`。
-- 创建每个 `PetCompanion`。
-- 动态新增、编辑、删除和保存单个 Agent。
+- `self.pets` 保存全量 Agent 档案 roster。
+- `self.widgets` 只保存当前出战、实际显示在桌面的 `PetWidget`。
+- 创建和定位已出战 Agent 的 `PetWidget`。
+- 创建已出战 Agent 的 `PetCompanion`。
 - 管理系统托盘和 `Agent 管理` 窗口。
+- 通过 `PetConfig.deployed` 持久化“出战/休息”状态，限制同时出战 1-6 个 Agent。
+- 管理自动群聊暂停/恢复、手动间隔 override 和夜间降频。
 - 路由本地/LLM 聊天。
-- 驱动自动群聊。
-- 维护群聊记录和单 Agent 记录。
-- 管理单 Agent 聊天窗口。
-- 管理默认模式人格导入并只切换被选中的 Agent。
-- 确保异步 LLM 回复按 `group` / `direct` 通道写入正确记录。
+- 管理云端流式逐字打字机状态。
+- 根据 Agent 性格控制单字打字速度、thinking delay 和自动群聊间隔。
+- 管理 SQLite 聊天持久化和显式记忆提取。
+- 管理单聊窗口、群聊窗口和人格导入。
 
-聊天记录状态：
+### `ui/pet_widget.py`
 
-- `group_history`：群聊最近 50 条。
-- `direct_histories`：按 `PetWidget` 分开的单 Agent 最近 50 条。
-- `group_history_window`：群聊记录窗口。
-- `direct_history_windows`：每个 Agent 的单聊记录窗口。
-- `direct_chat_windows`：每个 Agent 的独立输入式聊天窗口。
+桌面形象层：
 
-### `ui/pet_persona_import_dialog.py`
-
-默认模式人格导入弹窗：
-
-- 文件选择器限制 `.json` / `.txt` / `.csv`。
-- `聊天记录里的联系人` 用于定位要分析的发言者。
-- `导入后 Agent 名称` 用于生成 profile.name、桌面显示名和聊天窗口标题。
-- 点击 `分析` 后显示人格预览。
-- 点击 `确认导入` 后把 `PersonalityProfile` 交回 `PetManager` 保存并应用。
-
-当前同步分析文件；如果后续遇到大文件卡顿，再迁移到 `QThread`。
+- 默认圆形形象和名字标签。
+- 6 情绪 PNG 形象。
+- 边缘连通近白色背景透明化。
+- 呼吸、弹跳、摇摆、下沉、轻晃、上跳、抖动等动画。
+- 拖动、点击、双击聊天、右键菜单。
+- 流式气泡复用和更新。
 
 ### `ui/pet_chat_window.py`
 
 单 Agent 输入式聊天窗口：
 
-- 双击桌面 Agent 打开或复用窗口。
-- 上方展示该 Agent 最近单聊消息。
-- 底部输入框支持回车发送。
-- 发送后通过 `message_submitted` 复用 `PetManager._on_pet_chat_requested()`。
-- Agent 改名或导入人格后，`set_agent_name()` 会同步窗口标题和顶部标题。
+- 加载最近单聊消息。
+- 回车发送消息。
+- 支持流式 partial 临时消息行。
+- Agent 改名或导入人格后同步标题。
 
 ### `ui/chat_history_window.py`
 
 可复用聊天记录窗口：
 
-- 支持自定义标题和副标题。
-- 支持加载历史消息。
-- 支持追加实时消息。
-- 支持清空消息。
-- 当前接收带 `sender/content/kind/timestamp` 属性的消息对象，主要复用 `BusMessage`。
-
-### `core/agent_bus.py`
-
-旧版 `--mode agents` 的群聊总线：
-
-- `BusMessage` 仍作为通用 UI 消息对象复用。
-- `recent_history` 默认上限改为 `CHAT_UI_HISTORY_LIMIT = 50`。
-- 旧版 Agent 群聊记录继续由 `AgentManager` 接入 `ChatHistoryWindow`。
-
-## 4. API Key 与模型配置
-
-### `core/llm_settings.py`
-
-负责运行时 LLM 配置读取与保存：
-
-- `LLMSettings`
-- `load_llm_settings()`
-- `has_api_key()`
-- `save_llm_settings(...)`
-- `settings_to_client_kwargs(...)`
-
-配置优先级：
-
-1. 环境变量 / `.env`
-2. `keyring`
-3. `QSettings`
-4. 默认值
-
-保存策略：
-
-- Provider / Base URL / Model 保存到 `QSettings`。
-- API Key 优先保存到系统凭据管理器 `keyring`。
-- 如果 `keyring` 不可用，fallback 到当前 Windows 用户级 `QSettings`。
-- 不写入项目 `.env`。
+- 用于群聊记录和单 Agent 历史记录。
+- 支持加载、追加、清空消息。
+- 支持流式 partial 临时消息行。
+- 可选输入框用于用户加入群聊。
 
 ### `ui/api_key_dialog.py`
 
-用于首次配置和随时修改 API Key。
+API Key 配置和验证弹窗：
 
-字段：
+- `测试 Key` 只验证，不保存、不关闭。
+- `保存` 会先验证，成功后才写入设置并关闭。
+- 验证失败显示错误原因，不保存。
+- 已有 Key 只显示占位符，不回填明文。
+- 输入框留空时继续使用旧 Key，不覆盖旧 Key。
 
-- Provider
-- Base URL
-- Model
-- API Key
+## 7. 已移除能力
 
-默认桌面人格 Agent 模式的入口在系统托盘：
+当前精简版已移除：
 
-```text
-API Key 设置
-```
+- 工具执行框架。
+- 权限分级系统。
+- 工具权限确认弹窗。
+- 读文件工具。
+- 执行命令工具。
+- 截图工具。
+- 模型 tool_calls 调用循环。
 
-旧版 `--mode agents` 的入口在 Agent 右键菜单。
-
-## 5. 已移除的工具执行能力
-
-已删除文件：
-
-- `core/tooling.py`
-- `core/builtin_tools.py`
-- `ui/tool_permission_dialog.py`
-- `tests/test_tool_executor.py`
-- `tests/test_agent_tools.py`
-- `tests/test_llm_client_tools.py`
-
-已移除概念：
-
-- `PermissionLevel`
-- `ToolDefinition`
-- `ToolCallRequest`
-- `ToolResult`
-- `ToolContext`
-- `SandboxPolicy`
-- `ToolRegistry`
-- `ToolExecutor`
-- `read_file`
-- `execute_command`
-- `screenshot`
-
-已清理接线：
-
-- `main.py` 不再创建 `ToolRegistry.with_defaults()`。
-- `AgentBus` 不再保存 `permission_requester` / `screenshot_requester`。
-- `AgentBus.speak_once()` 不再构造 `ToolContext`。
-- `AgentManager` 不再桥接工具权限弹窗和截图请求。
-- `OpenAICompatibleClient.complete()` 不再接收 `tools` / `tool_choice`。
-
-## 6. 聊天记录导入流程
-
-默认桌面 Agent 模式新增轻量导入入口：
-
-```text
-导入人格
-```
-
-- 入口在单个桌面 Agent 右键菜单。
-- 支持 `.json` / `.txt` / `.csv`。
-- 使用 `PersonalityProfile` schema。
-- 保存到 `models/pet_personas/<safe-agent-name>/persona.json`。
-- 导入后调用 `PetCompanion.apply_profile()` 立即切换当前 Agent。
-- 不保存原始聊天文本。
-
-旧版头像 Agent 模式仍保留导入入口：
-
-```text
-导入聊天记录人格
-```
-
-导入弹窗以本地文件为主：
-
-```text
-导入聊天记录文件
-批量导入
-```
-
-支持格式：
-
-- `txt`
-- `csv`
-- `json`
-- `sqlite`
-- `db`
-- `sqlite3`
-
-wx-mcp 只作为参考链接展示，不在项目内自动下载和安装。
+因此默认桌面 Agent 不会主动读文件、执行命令或截图。
 
 ## 7. 测试
 
-当前测试命令：
+完整测试命令：
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'; $env:PYTHONPATH = 'F:\xmlg\agent\desktop-agents'; py -m unittest discover -s "F:\xmlg\agent\desktop-agents\tests"
 ```
 
-当前验证结果：
+当前结果：
 
 ```text
-Ran 123 tests
+Ran 201 tests
 OK
 ```
 
-当前测试覆盖：
+重点测试：
 
-- `tests/test_agent_conversation.py`
-- `tests/test_agent_bus.py`
+- `tests/test_reply_router.py`
+- `tests/test_chat_storage.py`
+- `tests/test_explicit_memory.py`
+- `tests/test_personality_rhythm.py`
+- `tests/test_llm_client.py`
 - `tests/test_api_key_dialog.py`
-- `tests/test_chat_history_window.py`
-- `tests/test_emotion.py`
-- `tests/test_extract_wechat.py`
-- `tests/test_llm_settings.py`
-- `tests/test_personality.py`
-- `tests/test_personality_trainer.py`
-- `tests/test_pet_chat_window.py`
-- `tests/test_pet_companion.py`
 - `tests/test_pet_manager.py`
-- `tests/test_pet_persona_importer.py`
-- `tests/test_pet_selector_dialog.py`
+- `tests/test_pet_companion.py`
 - `tests/test_pet_widget.py`
+- `tests/test_pet_chat_window.py`
+- `tests/test_chat_history_window.py`
 
-## 8. 当前重点文件总览
+## 8. 当前限制和后续开发点
 
-### 默认桌面人格 Agent 模式
-
-- `main.py`
-- `config.py`
-- `core/pet.py`
-- `core/personality_trainer.py`
-- `core/pet_persona_importer.py`
-- `core/emotion.py`
-- `core/pet_companion.py`
-- `ui/pet_selector_dialog.py`
-- `ui/pet_widget.py`
-- `ui/pet_manager.py`
-- `ui/pet_persona_import_dialog.py`
-- `ui/pet_chat_window.py`
-- `ui/chat_history_window.py`
-
-### 旧版 Agent 模式和共享能力
-
-- `core/agent.py`
-- `core/agent_bus.py`
-- `core/llm_client.py`
-- `core/llm_settings.py`
-- `core/personality.py`
-- `ui/agent_manager.py`
-- `ui/agent_widget.py`
-- `ui/api_key_dialog.py`
-- `ui/import_dialog.py`
-
-### 文档
-
-- `AGENT_WORK_GUIDE.md`
-- `PROGRESS.md`
-- `DEVELOPMENT_LOG.md`
-
-## 9. 当前已知限制
-
-1. 聊天记录目前是内存记录，应用退出后清空。
-2. 聊天记录暂不支持搜索、导出或持久化。
-3. 自动群聊没有暂停/频率 UI。
-4. 人格导入分析目前同步执行，超大导出文件可能让导入弹窗短暂卡顿。
-5. 多模型目前是 OpenAI-compatible 基础配置，没有完整 Provider 预设 UI。
-6. API Key fallback 到 QSettings 是为了解决本机 keyring 不可用问题，安全性弱于系统凭据管理器。
-7. 旧版头像 Agent 的聊天记录人格导入仍是较大的功能块，后续可继续评估是否保留。
-8. 当前版本不具备主动读文件、执行命令、截图能力；默认模式人格导入只读取用户明确选择的导出文件。
-
-## 10. 下次开发建议
-
-优先级建议：
-
-1. 确认 1.0 范围。
-2. 手动完整验证默认启动、形象选择、人格导入、单聊窗口、自动群聊、API Key 设置、群聊记录、单 Agent 记录。
-3. 评估聊天记录是否需要搜索、导出或持久化。
-4. 评估人格导入是否需要后台线程和更强预览。
-5. 评估是否保留旧版聊天记录导入人格和旧版 `--mode agents`。
-6. 用户确认 1.0 后再提交、打标签、推送。
+- 聊天记录已持久化到 SQLite，但暂不支持搜索、导出或置顶。
+- 显式记忆已能提取偏好/计划/事件/事实，但还没有完整的记忆管理 UI。
+- 自动群聊没有暂停/频率 UI。
+- 人格导入分析目前同步执行，超大导出文件可能让导入弹窗短暂卡顿。
+- 多模型目前是 OpenAI-compatible 基础配置，没有完整 Provider 预设 UI。
+- API Key fallback 到 QSettings 是为了兼容 keyring 不可用场景，安全性弱于系统凭据管理器。
+- 托盘 token 消耗统计暂缓；需要先统一保存非流式和流式 usage。
+- 微博每日热点可作为后续可选群聊主题来源，需要设计开关、缓存、限流和内容过滤。

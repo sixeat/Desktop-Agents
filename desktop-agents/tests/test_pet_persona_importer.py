@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.pet_persona_importer import BatchPersonaPlan, build_batch_personas, load_profile_from_export, safe_persona_slug, save_pet_persona, scan_persona_sources
-from core.personality_trainer import PersonalityTrainer
+from core.pet_persona_importer import BatchPersonaPlan, PersonaPackageMetadata, build_persona_package_preview, build_batch_personas, load_profile_from_export, safe_persona_slug, save_pet_persona, save_pet_persona_package, scan_persona_sources
+from core.personality_trainer import PersonalityProfile, PersonalityTrainer
 
 
 class PetPersonaImporterTest(unittest.TestCase):
@@ -72,6 +72,68 @@ class PetPersonaImporterTest(unittest.TestCase):
         self.assertEqual(loaded.name, "奶糖")
         self.assertEqual(safe_persona_slug("奶 糖!"), "奶_糖")
 
+    def test_persona_package_preview_has_privacy_flags_without_writing_files(self):
+        profile = PersonalityProfile(
+            name="朋友",
+            pet_type="cat",
+            personality_tag="活泼",
+            catchphrases=["电话13812345678"],
+            sentence_patterns=[],
+            emoji_habits=[],
+            topics=["日常"],
+            avg_sentence_length=5.0,
+            greeting_style="直接开聊",
+            system_prompt="你是朋友。",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package_dir = Path(temp_dir) / "朋友"
+            preview = build_persona_package_preview(
+                profile,
+                PersonaPackageMetadata(message_count=3, target_message_count=2, used_fallback_messages=True),
+            )
+
+            self.assertFalse(package_dir.exists())
+
+        self.assertIn("manifest.json", preview["files"])
+        self.assertIn("examples.jsonl", preview["files"])
+        self.assertFalse(preview["manifest"]["privacy"]["raw_chat_included"])
+        self.assertTrue(preview["manifest"]["privacy"]["local_only_default"])
+        self.assertFalse(preview["manifest"]["privacy"]["cloud_enhancement_enabled"])
+        self.assertTrue(preview["manifest"]["privacy"]["contains_anonymized_training_seed"])
+        self.assertEqual(preview["manifest"]["message_count"], 3)
+        self.assertTrue(preview["manifest"]["used_fallback_messages"])
+        self.assertGreater(preview["manifest"]["privacy"]["blocked_sensitive_patterns"], 0)
+
+    def test_save_pet_persona_package_writes_scrubbed_artifacts(self):
+        profile = PersonalityTrainer().analyze(
+            ["我的手机号是13812345678，邮箱是friend@example.com，住在上海市浦东新区。哈哈收到"],
+            pet_name="朋友",
+            pet_type="cat",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            persona_path = save_pet_persona_package(
+                profile,
+                Path(temp_dir) / "朋友",
+                PersonaPackageMetadata(message_count=12, target_message_count=10, used_fallback_messages=False),
+            )
+            package_dir = persona_path.parent
+            files = {path.name for path in package_dir.iterdir()}
+            combined = "\n".join(path.read_text(encoding="utf-8") for path in package_dir.iterdir())
+            manifest = json.loads((package_dir / "manifest.json").read_text(encoding="utf-8"))
+            eval_report = json.loads((package_dir / "eval_report.json").read_text(encoding="utf-8"))
+
+        self.assertEqual({"manifest.json", "persona.json", "style_profile.json", "examples.jsonl", "system_prompt.txt", "eval_report.json"}, files)
+        self.assertNotIn("13812345678", combined)
+        self.assertNotIn("friend@example.com", combined)
+        self.assertNotIn("上海市浦东新区", combined)
+        self.assertEqual(manifest["message_count"], 12)
+        self.assertFalse(manifest["privacy"]["raw_chat_included"])
+        self.assertTrue(manifest["privacy"]["contains_anonymized_training_seed"])
+        self.assertFalse(eval_report["privacy_checks"]["claims_real_person"])
+        self.assertGreater(eval_report["privacy_checks"]["blocked_sensitive_patterns"], 0)
+
     def test_scan_sources_discovers_private_and_group_senders(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             folder = Path(temp_dir)
@@ -127,12 +189,14 @@ class PetPersonaImporterTest(unittest.TestCase):
                 [BatchPersonaPlan(persona_name="张斌", source_names=["张斌", "斌哥"], pet_type="dog")],
                 output_dir=output_dir,
             )
+            manifest_exists = (results[0].output_path.parent / "manifest.json").exists()
 
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].profile.name, "张斌")
-        self.assertEqual(results[0].profile.pet_type, "dog")
-        self.assertEqual(results[0].message_count, 2)
-        self.assertEqual(results[0].output_path.name, "persona.json")
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].profile.name, "张斌")
+            self.assertEqual(results[0].profile.pet_type, "dog")
+            self.assertEqual(results[0].message_count, 2)
+            self.assertEqual(results[0].output_path.name, "persona.json")
+            self.assertTrue(manifest_exists)
 
 
 if __name__ == "__main__":

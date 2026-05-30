@@ -53,6 +53,21 @@ class PetChatWindowTest(unittest.TestCase):
         self.assertEqual(window.message_count(), 0)
         window.close()
 
+    def test_partial_message_updates_without_counting_as_history(self):
+        window = PetChatWindow("奶糖")
+
+        window.show_partial_message(BusMessage(sender="奶糖", content="你", kind="agent"))
+        window.update_partial_message("你好")
+
+        self.assertEqual(window.message_count(), 0)
+        self.assertIsNotNone(window._partial_row)
+        self.assertEqual(window._partial_bubble.text(), "你好")
+        window.clear_partial_message()
+        self.assertIsNone(window._partial_row)
+        window.append_message(BusMessage(sender="奶糖", content="你好", kind="agent"))
+        self.assertEqual(window.message_count(), 1)
+        window.close()
+
     def test_set_agent_name_updates_title(self):
         window = PetChatWindow("奶糖")
 

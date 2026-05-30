@@ -2,6 +2,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.pet_persona_importer import BatchPersonaPlan, BatchPersonaResult, build_batch_personas, scan_persona_sources
+from ui.theme import set_window_icon
 
 
 class BatchPersonaImportDialog(QDialog):
@@ -26,6 +28,7 @@ class BatchPersonaImportDialog(QDialog):
         self.selected_dir: Path | None = None
         self.sources = []
         self.results: list[BatchPersonaResult] = []
+        set_window_icon(self)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -35,9 +38,12 @@ class BatchPersonaImportDialog(QDialog):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(10)
 
-        intro = QLabel("选择 WeFlow/微信聊天记录导出文件夹，扫描后可按发送者生成人格；把多行的“人格名称”改成同一个名字即可合并同一个人。", self)
+        intro = QLabel("选择一个包含聊天记录导出文件的文件夹，程序会自动扫描里面的 .txt、.json、.csv 和 .db/.sqlite 文件，并按发送者生成人格；把多行的“人格名称”改成同一个名字即可合并同一个人。", self)
         intro.setWordWrap(True)
         root.addWidget(intro)
+
+        self.consent_checkbox = QCheckBox("我已获得这些聊天记录的使用授权，并同意仅在本机扫描和生成人格包；原始聊天不会复制进人格目录。", self)
+        root.addWidget(self.consent_checkbox)
 
         folder_row = QHBoxLayout()
         self.path_input = QLineEdit(self)
@@ -87,20 +93,26 @@ class BatchPersonaImportDialog(QDialog):
         if self.selected_dir is None:
             QMessageBox.warning(self, "请选择文件夹", "请先选择聊天记录导出文件夹。")
             return
+        if not self.consent_checkbox.isChecked():
+            QMessageBox.warning(self, "需要授权", "请确认你已获得聊天记录使用授权，并同意仅在本机扫描和生成人格包。")
+            return
         self.sources = scan_persona_sources(self.selected_dir)
         self._load_sources()
         self.generate_button.setEnabled(bool(self.sources))
         if not self.sources:
-            self.preview.setPlainText("没有发现可用于生成人格的发送者。")
+            self.preview.setPlainText("没有发现可用于生成人格的发送者。\n\n可能原因：\n1. 文件夹里没有支持的文件（.txt/.json/.csv/.db/.sqlite）\n2. txt 文件格式不符合（需要是 WeFlow 导出或带 [文字] 标签的格式）\n3. 所有发送者的消息都少于 2 条\n4. 有效消息都被过滤了（如 [图片] 占位、转账、空白行等）")
 
     def generate_personas(self) -> None:
+        if not self.consent_checkbox.isChecked():
+            QMessageBox.warning(self, "需要授权", "请确认你已获得聊天记录使用授权，并同意仅在本机生成人格包。")
+            return
         plans = self._build_plans()
         if not plans:
             QMessageBox.warning(self, "没有可生成的人格", "请至少勾选一个发送者，并填写人格名称。")
             return
         self.results = build_batch_personas(self.sources, plans, output_dir=self.output_dir)
         self.preview.setPlainText("\n".join(
-            f"已生成：{result.persona_name}（{result.message_count} 条，来源：{', '.join(result.source_names)}）"
+            f"已生成：{result.persona_name}（{result.message_count} 条，来源：{', '.join(result.source_names)}，保存到：{result.output_path}）"
             for result in self.results
         ))
         self.accept()
@@ -140,7 +152,11 @@ class BatchPersonaImportDialog(QDialog):
         if not self.sources:
             return
         plans = self._build_plans()
-        lines = [f"发现 {len(self.sources)} 个发送者，准备生成 {len(plans)} 个人格。"]
+        lines = [
+            f"发现 {len(self.sources)} 个发送者，准备生成 {len(plans)} 个人格。",
+            "隐私预览：扫描和生成仅在本机执行，原始聊天记录不会复制到人格目录。",
+            "人格包将包含 manifest/persona/style/examples/system_prompt/eval 等派生文件。",
+        ]
         for plan in plans:
             count = sum(source.message_count for source in self.sources if source.name in plan.source_names)
             merged = "、".join(plan.source_names)

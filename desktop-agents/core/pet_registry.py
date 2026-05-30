@@ -65,6 +65,7 @@ def _config_from_dict(data: dict) -> PetConfig:
         avatar_path=data.get("avatar_path"),
         persona_path=data.get("persona_path"),
         mood_avatar_paths=dict(data.get("mood_avatar_paths") or {}),
+        deployed=bool(data.get("deployed", True)),
     )
 
 def _config_to_dict(config: PetConfig) -> dict:

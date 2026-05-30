@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 
 from core.pet import PERSONALITY_TAGS, PetConfig, PetMood, default_pet_definition, default_personality_for_type
 from core.pet_registry import new_agent_id, normalize_pet_config
-from ui.theme import apply_cute_style, hint_style, title_style
+from ui.theme import apply_cute_style, hint_style, title_style, set_window_icon
 
 
 MOOD_IMAGE_LABELS = {
@@ -43,6 +43,7 @@ class AgentEditDialog(QDialog):
         self.config: PetConfig | None = None
         self.import_after_create = False
         self.mood_inputs: dict[PetMood, QLineEdit] = {}
+        set_window_icon(self)
         self._setup_ui()
         self._load_config(config)
 

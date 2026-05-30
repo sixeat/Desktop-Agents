@@ -28,6 +28,7 @@ class BatchPersonaImportDialogTest(unittest.TestCase):
             )
             dialog = BatchPersonaImportDialog(Path(temp_dir) / "personas")
             dialog.selected_dir = folder
+            dialog.consent_checkbox.setChecked(True)
 
             dialog.scan_folder()
             for row in range(dialog.table.rowCount()):
@@ -54,6 +55,7 @@ class BatchPersonaImportDialogTest(unittest.TestCase):
             )
             dialog = BatchPersonaImportDialog(output_dir)
             dialog.selected_dir = folder
+            dialog.consent_checkbox.setChecked(True)
             dialog.scan_folder()
 
             dialog.generate_personas()
@@ -61,6 +63,50 @@ class BatchPersonaImportDialogTest(unittest.TestCase):
             self.assertEqual(len(dialog.results), 1)
             self.assertTrue((output_dir / "老猪" / "persona.json").exists())
             dialog.close()
+
+    def test_scan_requires_consent(self):
+        dialog = BatchPersonaImportDialog(Path("personas"))
+        dialog.selected_dir = Path("exports")
+
+        with patch("ui.batch_persona_import_dialog.QMessageBox.warning") as warning, \
+                patch("ui.batch_persona_import_dialog.scan_persona_sources") as scan_sources:
+            dialog.scan_folder()
+
+        warning.assert_called_once()
+        scan_sources.assert_not_called()
+        dialog.close()
+
+    def test_generate_requires_consent(self):
+        dialog = BatchPersonaImportDialog(Path("personas"))
+        dialog.sources = []
+
+        with patch("ui.batch_persona_import_dialog.QMessageBox.warning") as warning, \
+                patch("ui.batch_persona_import_dialog.build_batch_personas") as build_personas:
+            dialog.generate_personas()
+
+        warning.assert_called_once()
+        build_personas.assert_not_called()
+        dialog.close()
+
+    def test_preview_includes_privacy_copy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            folder = Path(temp_dir) / "exports"
+            folder.mkdir()
+            (folder / "私聊_老猪.txt").write_text(
+                "2024-01-01 10:00:00 '老猪'\n快了快了\n\n"
+                "2024-01-01 10:01:00 '老猪'\n别催\n",
+                encoding="utf-8",
+            )
+            dialog = BatchPersonaImportDialog(Path(temp_dir) / "personas")
+            dialog.selected_dir = folder
+            dialog.consent_checkbox.setChecked(True)
+
+            dialog.scan_folder()
+            preview = dialog.preview.toPlainText()
+
+        self.assertIn("原始聊天记录不会复制到人格目录", preview)
+        self.assertIn("manifest/persona/style/examples/system_prompt/eval", preview)
+        dialog.close()
 
     def test_scan_without_folder_warns(self):
         dialog = BatchPersonaImportDialog(Path("personas"))

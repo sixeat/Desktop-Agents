@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.agent_bus import BusMessage
-from ui.theme import apply_cute_style
+from ui.theme import apply_cute_style, set_window_icon
 
 
 class PetChatWindow(QMainWindow):
@@ -25,12 +25,15 @@ class PetChatWindow(QMainWindow):
         super().__init__(parent)
         self.agent_name = agent_name
         self._message_count = 0
+        self._partial_row: QWidget | None = None
+        self._partial_bubble: QLabel | None = None
         self._setup_window()
         self._setup_ui()
 
     def _setup_window(self) -> None:
         self.setWindowTitle(f"和{self.agent_name}聊天")
         self.resize(560, 700)
+        set_window_icon(self)
         apply_cute_style(self)
 
     def _setup_ui(self) -> None:
@@ -40,12 +43,12 @@ class PetChatWindow(QMainWindow):
         root.setSpacing(12)
 
         self.title_label = QLabel(f"和{self.agent_name}聊天", self)
-        self.title_label.setStyleSheet("font-size: 22px; font-weight: 700; color: #111111;")
+        self.title_label.setStyleSheet("font-size: 22px; font-weight: 700; color: #794f27;")
         root.addWidget(self.title_label)
 
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("QScrollArea { border: 1px solid #DADCE0; border-radius: 6px; background: #FFFFFF; }")
+        self.scroll_area.setStyleSheet("QScrollArea { border: 3px solid #d4c9b4; border-radius: 16px; background: rgb(247, 243, 223); }")
         self.message_container = QWidget(self.scroll_area)
         self.message_layout = QVBoxLayout(self.message_container)
         self.message_layout.setContentsMargins(12, 12, 12, 12)
@@ -83,6 +86,27 @@ class PetChatWindow(QMainWindow):
             if widget:
                 widget.deleteLater()
         self._message_count = 0
+        self._partial_row = None
+        self._partial_bubble = None
+
+    def show_partial_message(self, message: BusMessage) -> None:
+        if self._partial_row is None:
+            self._partial_row, self._partial_bubble = self._create_message_row(message, return_bubble=True)
+            self.message_layout.insertWidget(self.message_layout.count() - 1, self._partial_row)
+        self.update_partial_message(message.content)
+
+    def update_partial_message(self, content: str) -> None:
+        if self._partial_bubble is not None:
+            self._partial_bubble.setText(content)
+            QTimer.singleShot(0, self._scroll_to_bottom)
+
+    def clear_partial_message(self) -> None:
+        if self._partial_row is None:
+            return
+        self.message_layout.removeWidget(self._partial_row)
+        self._partial_row.deleteLater()
+        self._partial_row = None
+        self._partial_bubble = None
 
     def message_count(self) -> int:
         return self._message_count
@@ -99,7 +123,7 @@ class PetChatWindow(QMainWindow):
         self.input.clear()
         self.message_submitted.emit(text)
 
-    def _create_message_row(self, msg: BusMessage) -> QWidget:
+    def _create_message_row(self, msg: BusMessage, return_bubble: bool = False):
         is_user = msg.kind == "user"
         row = QWidget(self)
         row_layout = QHBoxLayout(row)
@@ -110,7 +134,7 @@ class PetChatWindow(QMainWindow):
 
         timestamp = time.strftime("%H:%M:%S", time.localtime(msg.timestamp))
         meta = QLabel(f"{timestamp}  {msg.sender}", row)
-        meta.setStyleSheet("font-size: 11px; color: #6B7280;")
+        meta.setStyleSheet("font-size: 11px; color: #9f927d;")
         meta.setAlignment(Qt.AlignmentFlag.AlignRight if is_user else Qt.AlignmentFlag.AlignLeft)
 
         bubble = QLabel(msg.content, row)
@@ -119,11 +143,17 @@ class PetChatWindow(QMainWindow):
         bubble.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         bubble.setMaximumWidth(360)
         if is_user:
-            bubble.setStyleSheet("QLabel { background: #111111; color: #FFFFFF; border-radius: 8px; padding: 9px 12px; font-size: 14px; }")
+            bubble.setStyleSheet(
+                "QLabel { background: #19c8b9; color: #ffffff; border-radius: 14px; padding: 9px 14px; font-size: 14px; }"
+            )
         elif msg.kind == "system":
-            bubble.setStyleSheet("QLabel { background: #F2F2F2; color: #333333; border-radius: 8px; padding: 8px 11px; font-size: 13px; }")
+            bubble.setStyleSheet(
+                "QLabel { background: #e8e4d8; color: #725d42; border-radius: 14px; padding: 8px 12px; font-size: 13px; }"
+            )
         else:
-            bubble.setStyleSheet("QLabel { background: #FFFFFF; color: #111111; border: 1px solid #DADCE0; border-radius: 8px; padding: 9px 12px; font-size: 14px; }")
+            bubble.setStyleSheet(
+                "QLabel { background: rgb(247, 243, 223); color: #794f27; border: 3px solid #d4c9b4; border-radius: 14px; padding: 9px 14px; font-size: 14px; }"
+            )
 
         bubble_box.addWidget(meta)
         bubble_box.addWidget(bubble)
@@ -133,6 +163,8 @@ class PetChatWindow(QMainWindow):
         else:
             row_layout.addLayout(bubble_box)
             row_layout.addStretch(1)
+        if return_bubble:
+            return row, bubble
         return row
 
     def _scroll_to_bottom(self) -> None:

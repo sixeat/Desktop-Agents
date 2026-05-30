@@ -54,6 +54,7 @@ class PetWidget(DesktopWindow):
         self._drag_moved = False
         self._breathe_forward = True
         self._bubbles: list[ChatBubble] = []
+        self._stream_bubble: ChatBubble | None = None
         self._avatar_pixmaps: dict[PetMood, QPixmap] = {}
         self._setup_ui()
         self._load_avatar_pixmaps()
@@ -150,9 +151,26 @@ class PetWidget(DesktopWindow):
         bubble.destroyed.connect(lambda _=None, item=bubble: self._remove_bubble(item))
         bubble.show_above(self)
 
+    def show_or_update_stream_speech(self, content: str) -> None:
+        if self._stream_bubble is None or self._stream_bubble not in self._bubbles:
+            bubble = ChatBubble(self.pet_config.name, content)
+            self._stream_bubble = bubble
+            self._bubbles.append(bubble)
+            bubble.destroyed.connect(lambda _=None, item=bubble: self._remove_bubble(item))
+            bubble.show_above(self)
+            return
+        self._stream_bubble.update_content(content)
+        self._stream_bubble.show_above(self)
+
+    def finish_stream_speech(self, content: str) -> None:
+        self.show_or_update_stream_speech(content)
+        self._stream_bubble = None
+
     def _remove_bubble(self, bubble: ChatBubble) -> None:
         if bubble in self._bubbles:
             self._bubbles.remove(bubble)
+        if bubble is self._stream_bubble:
+            self._stream_bubble = None
 
     def _reposition_bubbles(self) -> None:
         for bubble in self._bubbles:
@@ -183,13 +201,13 @@ class PetWidget(DesktopWindow):
         pixmap = QPixmap(str(resolved))
         if pixmap.isNull():
             return None
-        pixmap = self._make_edge_white_transparent(pixmap)
-        return pixmap.scaled(
+        pixmap = pixmap.scaled(
             PET_SIZE,
             PET_SIZE,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation,
         )
+        return self._make_edge_white_transparent(pixmap)
 
     def _make_edge_white_transparent(self, pixmap: QPixmap) -> QPixmap:
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
@@ -246,8 +264,8 @@ class PetWidget(DesktopWindow):
         circle = QRectF(circle_x, circle_y, size, size)
 
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(0, 0, 0, 45)))
-        painter.drawEllipse(circle.translated(2, 3))
+        painter.setBrush(QBrush(QColor(189, 174, 160, 55)))
+        painter.drawEllipse(circle.translated(2, 4))
         avatar = self._avatar_pixmaps.get(self.mood)
         if avatar is not None:
             clip = QPainterPath()
@@ -319,15 +337,16 @@ class PetWidget(DesktopWindow):
 
     def _draw_name_label(self, painter: QPainter) -> None:
         label_rect = QRectF(0, PET_WIDGET_MARGIN + PET_SIZE + self._bounce_offset, self.width(), PET_LABEL_HEIGHT)
+        inner = label_rect.adjusted(10, 3, -10, -3)
         path = QPainterPath()
-        path.addRoundedRect(label_rect.adjusted(8, 2, -8, -2), 8, 8)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(255, 255, 255, 215)))
+        path.addRoundedRect(inner, 16, 16)
+        painter.setPen(QPen(QColor(212, 201, 180), 3))
+        painter.setBrush(QBrush(QColor(247, 243, 223, 235)))
         painter.drawPath(path)
-        painter.setPen(QPen(QColor(55, 55, 65)))
+        painter.setPen(QPen(QColor(121, 79, 39)))
         painter.setFont(QFont("Microsoft YaHei", 10, QFont.Weight.Bold))
         metrics = painter.fontMetrics()
-        name = metrics.elidedText(self.pet_config.name, Qt.TextElideMode.ElideRight, int(label_rect.width()) - 18)
+        name = metrics.elidedText(self.pet_config.name, Qt.TextElideMode.ElideRight, int(label_rect.width()) - 24)
         painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, name)
 
     def mousePressEvent(self, event) -> None:

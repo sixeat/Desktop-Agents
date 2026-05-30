@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from config import PET_CHAT_HISTORY_LIMIT
 from core.emotion import EmotionEngine, EmotionSignal, EmotionState
 from core.pet import PetConfig, PetMood
+from core.personality_rhythm import get_rhythm
 from core.personality_trainer import PersonalityProfile, PersonalityTrainer
 
 
@@ -23,7 +24,7 @@ class PetCompanion:
     ):
         self.pet_config = pet_config
         self.profile = profile or PersonalityTrainer()._default_profile(pet_config.name, pet_config.type_id)
-        if self.profile.personality_tag != pet_config.personality_tag:
+        if profile is None and self.profile.personality_tag != pet_config.personality_tag:
             self.profile.personality_tag = pet_config.personality_tag
             self.profile.system_prompt = PersonalityTrainer()._build_system_prompt(
                 pet_config.name,
@@ -55,7 +56,7 @@ class PetCompanion:
         self._remember(text or event_type, reply)
         return PetResponse(reply, self.emotion_state.mood, "local", self.emotion_state.reason)
 
-    async def chat(self, user_input: str, client=None) -> PetResponse:
+    async def chat(self, user_input: str, client=None, memory_context: str | None = None) -> PetResponse:
         self.emotion_state = self.emotion_engine.analyze(
             EmotionSignal("chat", user_input),
             self.emotion_state,
@@ -67,7 +68,7 @@ class PetCompanion:
             return PetResponse(reply, self.emotion_state.mood, "local", self.emotion_state.reason)
 
         try:
-            reply = await client.chat(self.build_messages(user_input, self.emotion_state.mood))
+            reply = await client.chat(self.build_messages(user_input, self.emotion_state.mood, memory_context))
         except Exception:
             reply = self.local_reply(user_input, self.emotion_state.mood)
             self._remember(user_input, reply)
@@ -77,14 +78,23 @@ class PetCompanion:
         self._remember(user_input, clean_reply)
         return PetResponse(clean_reply, self.emotion_state.mood, "llm", self.emotion_state.reason)
 
-    def build_messages(self, user_input: str, mood: PetMood) -> list[dict[str, str]]:
+    def build_messages(self, user_input: str, mood: PetMood, memory_context: str | None = None) -> list[dict[str, str]]:
         mood_prompt = self.emotion_engine.mood_prompt(mood, self.profile.personality_tag)
-        system_prompt = f"""{self.profile.system_prompt}
+        rhythm = get_rhythm(self.profile.personality_tag)
+        memory_section = ""
+        if memory_context:
+            memory_section = f"""
+
+【已知用户记忆】
+{memory_context}
+使用规则：只在自然相关时使用这些记忆；不要机械复述；不要提数据库、记忆表或系统实现。"""
+        system_prompt = f"""{self.profile.system_prompt}{memory_section}
 
 【当前状态】
 - 当前情绪：{mood.value}
 - 情绪表达：{mood_prompt}
-- 回复必须适合桌面气泡，1-2句话，不要输出名字前缀。""".strip()
+- 回复必须适合桌面气泡，1-2句话，不要输出名字前缀。
+- 回复长度尽量不超过 {rhythm.max_reply_length} 个中文字符。""".strip()
         return [
             {"role": "system", "content": system_prompt},
             *self.history[-PET_CHAT_HISTORY_LIMIT:],
@@ -143,6 +153,9 @@ class PetCompanion:
                 continue
             return line[:18]
         return "刚才的话题"
+
+    def remember_exchange(self, user_input: str, reply: str) -> None:
+        self._remember(user_input, reply)
 
     def _remember(self, user_input: str, reply: str) -> None:
         if user_input:

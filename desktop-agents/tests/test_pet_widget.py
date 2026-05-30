@@ -63,6 +63,20 @@ class PetWidgetTest(unittest.TestCase):
         self.assertEqual(len(widget._bubbles), 1)
         widget.close()
 
+    def test_stream_speech_updates_existing_bubble(self):
+        widget = self.make_widget()
+        widget.show()
+
+        widget.show_or_update_stream_speech("你")
+        widget.show_or_update_stream_speech("你好")
+
+        self.assertEqual(len(widget._bubbles), 1)
+        self.assertEqual(widget._bubbles[0].content, "你好")
+        widget.finish_stream_speech("你好呀")
+        self.assertEqual(len(widget._bubbles), 1)
+        self.assertEqual(widget._bubbles[0].content, "你好呀")
+        widget.close()
+
     def test_history_signal_can_be_emitted(self):
         widget = self.make_widget()
         requests = []

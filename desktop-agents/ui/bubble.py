@@ -20,11 +20,14 @@ class ChatBubble(QWidget):
         self.sender = sender
         self.content = content
         self._fade_animation: QPropertyAnimation | None = None
+        self._fade_timer = QTimer(self)
+        self._fade_timer.setSingleShot(True)
+        self._fade_timer.timeout.connect(self._fade_out)
         self._setup_window()
         self._setup_ui()
         if anchor_widget:
             self.show_above(anchor_widget)
-        QTimer.singleShot(6000, self._fade_out)
+        self._fade_timer.start(6000)
 
     def _setup_window(self):
         self.setWindowFlags(
@@ -45,14 +48,20 @@ class ChatBubble(QWidget):
         sender_label = QLabel(self.sender, self)
         sender_label.setStyleSheet("color: #2B2B2B; font-weight: 700; font-size: 12px; background: transparent;")
 
-        content_label = QLabel(self.content, self)
-        content_label.setWordWrap(True)
-        content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        content_label.setStyleSheet("color: #222222; font-size: 14px; line-height: 1.35; background: transparent;")
+        self.content_label = QLabel(self.content, self)
+        self.content_label.setWordWrap(True)
+        self.content_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        self.content_label.setStyleSheet("color: #222222; font-size: 14px; line-height: 1.35; background: transparent;")
 
         layout.addWidget(sender_label)
-        layout.addWidget(content_label)
+        layout.addWidget(self.content_label)
         self.adjustSize()
+
+    def update_content(self, content: str) -> None:
+        self.content = content
+        self.content_label.setText(content)
+        self.adjustSize()
+        self._fade_timer.start(6000)
 
     def show_above(self, anchor_widget: QWidget):
         self.adjustSize()
@@ -76,15 +85,15 @@ class ChatBubble(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
 
         bubble_rect = self.rect().adjusted(2, 2, -2, -self.TRIANGLE_HEIGHT - 2)
-        shadow_rect = bubble_rect.translated(0, 2)
+        shadow_rect = bubble_rect.translated(0, 3)
 
         shadow_path = QPainterPath()
         shadow_path.addRoundedRect(shadow_rect.toRectF(), self.RADIUS, self.RADIUS)
-        painter.fillPath(shadow_path, QColor(0, 0, 0, 35))
+        painter.fillPath(shadow_path, QColor(180, 160, 130, 35))
 
         bubble_path = QPainterPath()
         bubble_path.addRoundedRect(bubble_rect.toRectF(), self.RADIUS, self.RADIUS)
-        painter.fillPath(bubble_path, QColor(255, 255, 255, 225))
+        painter.fillPath(bubble_path, QColor(247, 243, 223, 245))
 
         triangle_center = self.width() // 2
         triangle = QPainterPath()
@@ -92,9 +101,9 @@ class ChatBubble(QWidget):
         triangle.lineTo(triangle_center + 9, bubble_rect.bottom())
         triangle.lineTo(triangle_center, bubble_rect.bottom() + self.TRIANGLE_HEIGHT)
         triangle.closeSubpath()
-        painter.fillPath(triangle, QColor(255, 255, 255, 225))
+        painter.fillPath(triangle, QColor(247, 243, 223, 245))
 
-        painter.setPen(QPen(QColor(255, 255, 255, 80), 1))
+        painter.setPen(QPen(QColor(212, 201, 180, 140), 3))
         painter.drawPath(bubble_path)
         painter.end()
 

@@ -19,6 +19,8 @@ TYPE_COLUMNS = ("Type", "MsgType", "type", "msgType")
 LOCAL_ID_COLUMNS = ("LocalId", "localId", "MsgSvrID", "msgId", "id")
 
 TEXT_PLACEHOLDERS = {"[图片]", "[语音]", "[视频]", "[文件]", "[动画表情]", "[表情]", "[表情包]", "[位置]"}
+STICKER_RE = re.compile(r"\[(?:表情|动画表情|表情包)(?:[：:][^\]]*)?\]")
+QUOTE_RE = re.compile(r"引用\[[^\]]+\]|^\s*>\s*")
 XML_PREFIXES = ("<msg", "<appmsg", "<sysmsg", "<?xml")
 TEXT_EXPORT_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(.+?)\s+\[(.+?)\]\s*(.*)$")
 WEFLOW_TEXT_EXPORT_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+'(.+?)'\s*$")
@@ -218,6 +220,10 @@ def clean_message_text(content: Any) -> str | None:
         return None
     text = str(content).strip()
     if not text or text in TEXT_PLACEHOLDERS:
+        return None
+    if STICKER_RE.fullmatch(text):
+        return None
+    if QUOTE_RE.match(text):
         return None
     lowered = text.lower()
     if lowered.startswith(XML_PREFIXES):

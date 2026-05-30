@@ -2,11 +2,13 @@ import argparse
 import sys
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QInputDialog
 
-from config import PERSONAS_DIR
+from config import MAX_DESKTOP_AGENTS, MIN_DESKTOP_AGENTS, PERSONAS_DIR
 from core.agent import Agent
 from core.agent_bus import AgentBus
+from core.chat_storage import ChatStorage
+from core.explicit_memory import ExplicitMemoryStore
 from core.llm_client import OpenAICompatibleClient
 from core.llm_settings import has_api_key, load_llm_settings, settings_to_client_kwargs
 from core.pet_registry import load_pet_configs, save_pet_configs
@@ -30,16 +32,37 @@ def ensure_llm_configured() -> bool:
     return dialog.exec() == ApiKeyDialog.DialogCode.Accepted
 
 
+def create_initial_pet_configs() -> list:
+    count, ok = QInputDialog.getInt(
+        None,
+        "选择桌面 Agent 数量",
+        f"请选择要出现在桌面的 Agent 数量（{MIN_DESKTOP_AGENTS}-{MAX_DESKTOP_AGENTS} 个）：",
+        3,
+        MIN_DESKTOP_AGENTS,
+        MAX_DESKTOP_AGENTS,
+        1,
+    )
+    if not ok:
+        return []
+    configs = []
+    for index in range(count):
+        dialog = AgentEditDialog()
+        dialog.setWindowTitle(f"创建第 {index + 1}/{count} 个 Agent")
+        if dialog.exec() != AgentEditDialog.DialogCode.Accepted or dialog.config is None:
+            return []
+        configs.append(dialog.config)
+    return configs
+
+
 def run_pet_mode(app: QApplication, open_manager: bool = False) -> bool:
     configs = load_pet_configs()
     if not configs:
-        dialog = AgentEditDialog()
-        if dialog.exec() != AgentEditDialog.DialogCode.Accepted or dialog.config is None:
+        configs = create_initial_pet_configs()
+        if not configs:
             return False
-        configs = [dialog.config]
         save_pet_configs(configs)
 
-    manager = PetManager(configs)
+    manager = PetManager(configs, chat_storage=ChatStorage(), explicit_memory=ExplicitMemoryStore())
     manager.create_widgets()
     manager.show_all()
     if open_manager:

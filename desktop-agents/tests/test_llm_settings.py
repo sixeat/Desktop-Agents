@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from core import llm_settings
-from core.llm_settings import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, LLMSettings
+from core.llm_settings import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, ROUTE_MODE_CLOUD_WHEN_KEY, ROUTE_MODE_LOCAL_ONLY, LLMSettings
 
 
 class FakeQSettings:
@@ -98,6 +98,35 @@ class LLMSettingsTest(unittest.TestCase):
 
         self.assertEqual(settings.api_key, "fallback-key")
         self.assertEqual(settings.source, "settings")
+
+    def test_qsettings_key_is_kept_as_keyring_read_fallback(self):
+        llm_settings.save_llm_settings(LLMSettings(api_key="saved-key"))
+        FakeKeyring.password = ""
+
+        settings = llm_settings.load_llm_settings()
+
+        self.assertEqual(settings.api_key, "saved-key")
+        self.assertEqual(settings.source, "settings")
+
+    def test_default_reply_route_mode_is_cloud_when_key(self):
+        settings = llm_settings.load_llm_settings()
+
+        self.assertEqual(settings.reply_route_mode, ROUTE_MODE_CLOUD_WHEN_KEY)
+        self.assertEqual(llm_settings.load_reply_route_mode(), ROUTE_MODE_CLOUD_WHEN_KEY)
+
+    def test_save_and_reload_reply_route_mode(self):
+        llm_settings.save_llm_settings(LLMSettings(api_key="saved-key", reply_route_mode=ROUTE_MODE_LOCAL_ONLY))
+
+        settings = llm_settings.load_llm_settings()
+
+        self.assertEqual(settings.reply_route_mode, ROUTE_MODE_LOCAL_ONLY)
+
+    def test_invalid_reply_route_mode_falls_back_to_default(self):
+        llm_settings.save_llm_settings(LLMSettings(api_key="saved-key", reply_route_mode="bad-mode"))
+
+        settings = llm_settings.load_llm_settings()
+
+        self.assertEqual(settings.reply_route_mode, ROUTE_MODE_CLOUD_WHEN_KEY)
 
     def test_missing_key_reports_false(self):
         self.assertFalse(llm_settings.has_api_key())
